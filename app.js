@@ -21,9 +21,11 @@ const uid = () => 'L' + (++layerSeq) + '-' + Date.now().toString(36);
 // ----- 캔버스 -----
 const board = $('board'), ctx = board.getContext('2d');
 const canvasWH = () => RATIOS[state.ratio];
+let showSelection = true;
 let layerBoxes = [];   // { id, x, y, w, h } 렌더 때 계산
 
-function render() {
+function render(showUI = true) {
+  showSelection = showUI;
   const [W, H] = canvasWH();
   if (board.width !== W || board.height !== H) { board.width = W; board.height = H; }
   ctx.letterSpacing = '0px';
@@ -48,41 +50,69 @@ function render() {
   // 선택 레이어 리사이즈 핸들 — 모서리=비율 유지, 변=한 축만
   handleBoxes = [];
   const sb = layerBoxes.find(b => b.id === state.sel);
-  if (sb?.w) {
-    const hs = 18;   // 핸들 크기 (캔버스 단위)
+  if (showSelection && sb?.w) {
+    const hs = 26;
+    const { x, y, w, h } = sb.local;
+    const mx = x + w / 2, my = y + h / 2;
     const pts = [
-      { dir: 'nw', x: sb.x, y: sb.y }, { dir: 'n', x: sb.x + sb.w / 2, y: sb.y }, { dir: 'ne', x: sb.x + sb.w, y: sb.y },
-      { dir: 'w', x: sb.x, y: sb.y + sb.h / 2 }, { dir: 'e', x: sb.x + sb.w, y: sb.y + sb.h / 2 },
-      { dir: 'sw', x: sb.x, y: sb.y + sb.h }, { dir: 's', x: sb.x + sb.w / 2, y: sb.y + sb.h }, { dir: 'se', x: sb.x + sb.w, y: sb.y + sb.h },
+      { dir: 'nw', x, y }, { dir: 'n', x: mx, y }, { dir: 'ne', x: x + w, y },
+      { dir: 'w', x, y: my }, { dir: 'e', x: x + w, y: my },
+      { dir: 'sw', x, y: y + h }, { dir: 's', x: mx, y: y + h }, { dir: 'se', x: x + w, y: y + h },
     ];
     for (const p of pts) {
-      ctx.fillStyle = '#FFFFFF';
-      ctx.strokeStyle = '#8B7CFF';
-      ctx.lineWidth = 3;
-      ctx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-      ctx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
-      handleBoxes.push({ dir: p.dir, x: p.x - hs / 2 - 8, y: p.y - hs / 2 - 8, w: hs + 16, h: hs + 16, cx: p.x, cy: p.y });
+      const q = framePoint(sb.ox, sb.oy, p.x, p.y, sb.sx, sb.sy, sb.rot);
+      ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#8B7CFF'; ctx.lineWidth = 3;
+      ctx.fillRect(q.x - hs / 2, q.y - hs / 2, hs, hs);
+      ctx.strokeRect(q.x - hs / 2, q.y - hs / 2, hs, hs);
+      handleBoxes.push({ dir: p.dir, x: q.x - hs, y: q.y - hs, w: hs * 2, h: hs * 2, cx: q.x, cy: q.y });
     }
   }
 }
 let handleBoxes = [];
 
-function selBox(L, x, y, w, h) {
-  layerBoxes.push({ id: L.id, x, y, w, h });
-  if (L.id === state.sel) {
+function framePoint(ox, oy, x, y, sx, sy, rot) {
+  const a = rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  const px = x * sx, py = y * sy;
+  return { x: ox + px * c - py * s, y: oy + px * s + py * c };
+}
+function toFrame(px, py, ox, oy, rot) {
+  const a = rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  const dx = px - ox, dy = py - oy;
+  return { x: dx * c + dy * s, y: -dx * s + dy * c };
+}
+function selBox(L, x, y, w, h, W, H) {
+  const ox = W * coord(L.x), oy = H * coord(L.y), sx = L.sx || 1, sy = L.sy || 1, rot = L.rot || 0;
+  const local = { x, y, w, h };
+  const corners = [
+    framePoint(ox, oy, x, y, sx, sy, rot),
+    framePoint(ox, oy, x + w, y, sx, sy, rot),
+    framePoint(ox, oy, x + w, y + h, sx, sy, rot),
+    framePoint(ox, oy, x, y + h, sx, sy, rot),
+  ];
+  const xs = corners.map(p => p.x), ys = corners.map(p => p.y);
+  const box = { id: L.id, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), corners, local, ox, oy, sx, sy, rot };
+  layerBoxes.push(box);
+  if (showSelection && L.id === state.sel) {
     ctx.strokeStyle = 'rgba(139,124,255,.9)';
     ctx.lineWidth = 3; ctx.setLineDash([10, 8]);
-    ctx.strokeRect(x, y, w, h);
-    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(corners[0].x, corners[0].y);
+    for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y);
+    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
   }
 }
-const lx = (v) => Math.max(0, Math.min(1, v || 0));
+function hitLayerBox(b, px, py) {
+  const p = toFrame(px, py, b.ox, b.oy, b.rot);
+  const x = p.x / b.sx, y = p.y / b.sy;
+  return x >= b.local.x && x <= b.local.x + b.local.w && y >= b.local.y && y <= b.local.y + b.local.h;
+}
+const lx = (v) => Math.max(0, Math.min(1, Number.isFinite(+v) ? +v : 0));
+const coord = (v) => Math.max(-4, Math.min(4, Number.isFinite(+v) ? +v : .5));
 
 // --- 문구 레이어 ---
 function drawTextLayer(L, W, H) {
   if (!L.text.trim()) { layerBoxes.push({ id: L.id, x: 0, y: 0, w: 0, h: 0 }); return; }
   const size = Math.min(Math.max(L.size | 0, 8), 240);
-  const cx = W * lx(L.x), cy = H * lx(L.y);
+  const cx = W * coord(L.x), cy = H * coord(L.y);
   const sx = L.sx || 1, sy = L.sy || 1;
   ctx.save();
   ctx.font = `${L.italic ? 'italic ' : ''}${L.weight || 400} ${size}px ${L.font}, sans-serif`;
@@ -94,7 +124,7 @@ function drawTextLayer(L, W, H) {
   const lh = size * 1.35;
   // 실제 잉크 경계로 박스 계산 (기울임·자간·글리프 넘침까지 정확히)
   const mets = lines.map(ln => ctx.measureText(ln));
-  let inkL = 0, inkR = 0, asc = size * .8, desc = size * .3, maxLine = 0;
+  let inkL = 0, inkR = 0, asc = 0, desc = 0, maxLine = 0;
   for (const m of mets) {
     const l = m.actualBoundingBoxLeft ?? m.width / 2;
     const r = m.actualBoundingBoxRight ?? m.width / 2;
@@ -107,6 +137,7 @@ function drawTextLayer(L, W, H) {
     if (m.width > maxLine) maxLine = m.width;
   }
   const bh = lines.length * lh;
+  const offsetX = (inkL - inkR) / 2, offsetY = (asc - desc) / 2;
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
   ctx.scale(sx, sy);
@@ -114,7 +145,7 @@ function drawTextLayer(L, W, H) {
   const fillOf = (dy) => {
     if (L.fx === 'grad') {
       const a = (L.grad?.ang ?? 180) * Math.PI / 180;
-      const g = ctx.createLinearGradient(-Math.cos(a) * maxLine / 2, -Math.sin(a) * bh / 2, Math.cos(a) * maxLine / 2, Math.sin(a) * bh / 2);
+      const g = ctx.createLinearGradient(offsetX - Math.cos(a) * maxLine / 2, offsetY - Math.sin(a) * bh / 2, offsetX + Math.cos(a) * maxLine / 2, offsetY + Math.sin(a) * bh / 2);
       g.addColorStop(0, L.grad?.a || '#FFD166');
       g.addColorStop(1, L.grad?.b || '#FF6B5E');
       return g;
@@ -123,16 +154,16 @@ function drawTextLayer(L, W, H) {
   };
   const drawAll = (dx, dy, style) => {
     lines.forEach((line, i) => {
-      const y = (i - (lines.length - 1) / 2) * lh + dy;
+      const y = (i - (lines.length - 1) / 2) * lh + offsetY + dy;
       ctx.fillStyle = style;
-      ctx.fillText(line, dx, y);
+      ctx.fillText(line, offsetX + dx, y);
     });
   };
   if (L.outline) {
     ctx.lineWidth = Math.max(4, size * .09);
     ctx.lineJoin = 'round';
     ctx.strokeStyle = textOutlineColor(L.color);   // 글자 밝기에 따라 대비 외곽선
-    lines.forEach((line, i) => ctx.strokeText(line, 0, (i - (lines.length - 1) / 2) * lh));
+    lines.forEach((line, i) => ctx.strokeText(line, offsetX, (i - (lines.length - 1) / 2) * lh + offsetY));
   }
   if (L.fx === 'glitch') { drawAll(-4, 0, 'rgba(92,224,255,.75)'); drawAll(4, 0, 'rgba(255,92,224,.75)'); }
   drawAll(0, 0, fillOf());
@@ -140,9 +171,10 @@ function drawTextLayer(L, W, H) {
   ctx.globalAlpha = 1;
   // 실제 글리프 범위에 맞춘 박스: 첫 줄 위(ascender)~마지막 줄 아래(descender)
   const half = (lines.length - 1) / 2;
-  const top = cy - half * lh * sy - asc * sy;
-  const boxH = half * 2 * lh * sy + asc * sy + desc * sy;
-  selBox(L, cx - inkL * sx - 8, top - 8, (inkL + inkR) * sx + 16, boxH + 16);
+  const padX = 8 + (L.fx === 'glitch' ? 4 : 0) + (L.outline ? size * .045 : 0);
+  const padY = 8 + (L.outline ? size * .045 : 0);
+  selBox(L, offsetX - inkL - padX / sx, offsetY - half * lh - asc - padY / sy,
+    inkL + inkR + padX * 2 / sx, half * 2 * lh + asc + desc + padY * 2 / sy, W, H);
 }
 function wrapText(text, maxW) {
   const out = [];
@@ -160,28 +192,26 @@ function wrapText(text, maxW) {
 // --- 이미지 레이어 ---
 function drawImgLayer(L, W, H) {
   if (!L.el?.complete || !L.el?.naturalWidth) { layerBoxes.push({ id: L.id, x: 0, y: 0, w: 0, h: 0 }); return; }
-  const w = W * Math.min(Math.max(L.w || .3, .02), 2) * (L.sx || 1);
-  const h = w * L.el.naturalHeight / L.el.naturalWidth * (L.sy || 1) / (L.sx || 1);
-  const hh = w * L.el.naturalHeight / L.el.naturalWidth / (L.sx || 1) * (L.sy || 1);
-  const cx = W * lx(L.x), cy = H * lx(L.y);
+  const dw = W * Math.min(Math.max(L.w || .3, .02), 2);
+  const dh = dw * L.el.naturalHeight / L.el.naturalWidth;
+  const cx = W * coord(L.x), cy = H * coord(L.y);
+  const sx = L.sx || 1, sy = L.sy || 1;
   ctx.save();
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
-  ctx.scale(L.sx || 1, L.sy || 1);
+  ctx.scale(sx, sy);
   ctx.globalAlpha = (L.op ?? 100) / 100;
-  const dw = W * Math.min(Math.max(L.w || .3, .02), 2);
-  const dh = dw * L.el.naturalHeight / L.el.naturalWidth;
   ctx.drawImage(L.el, -dw / 2, -dh / 2, dw, dh);
   ctx.restore();
   ctx.globalAlpha = 1;
-  selBox(L, cx - dw * (L.sx || 1) / 2 - 6, cy - dh * (L.sy || 1) / 2 - 6, dw * (L.sx || 1) + 12, dh * (L.sy || 1) + 12);
+  selBox(L, -dw / 2 - 6 / sx, -dh / 2 - 6 / sy, dw + 12 / sx, dh + 12 / sy, W, H);
 }
 
 // --- 도형 레이어 ---
 function drawShapeLayer(L, W, H) {
   const w = W * Math.min(Math.max(L.w || .3, .02), 1.5);
   const h = w * .8;
-  const cx = W * lx(L.x), cy = H * lx(L.y);
+  const cx = W * coord(L.x), cy = H * coord(L.y);
   ctx.save();
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
@@ -199,7 +229,7 @@ function drawShapeLayer(L, W, H) {
   ctx.fill();
   ctx.restore();
   ctx.globalAlpha = 1;
-  selBox(L, cx - w * (L.sx || 1) / 2 - 6, cy - h * (L.sy || 1) / 2 - 6, w * (L.sx || 1) + 12, h * (L.sy || 1) + 12);
+  selBox(L, -w / 2 - 6 / (L.sx || 1), -h / 2 - 6 / (L.sy || 1), w + 12 / (L.sx || 1), h + 12 / (L.sy || 1), W, H);
 }
 function shapePath(shape, w, h) {
   const r = w / 2;
@@ -226,6 +256,7 @@ function ensureDrawCv(L, W, H) {
   if (!L.cv || L.cvW !== W || L.cvH !== H) {
     L.cv = document.createElement('canvas');
     L.cv.width = W; L.cv.height = H;
+    L.cv.getContext('2d', { willReadFrequently: true });
     L.cvW = W; L.cvH = H;
     replayStrokes(L);
   }
@@ -237,18 +268,14 @@ function replayStrokes(L) {
   for (const s of L.strokes || []) {
     o.save();
     o.globalCompositeOperation = s.erase ? 'destination-out' : 'source-over';
-    o.strokeStyle = s.color; o.lineWidth = s.size;
+    o.strokeStyle = s.color; o.fillStyle = s.color; o.lineWidth = s.size;
     o.lineCap = 'round'; o.lineJoin = 'round';
     o.beginPath();
     const pts = s.pts;
     if (pts.length === 1) { o.arc(pts[0][0] * W, pts[0][1] * H, s.size / 2, 0, 7); o.fill(); }
     else {
       o.moveTo(pts[0][0] * W, pts[0][1] * H);
-      for (let i = 1; i < pts.length - 1; i++) {
-        const mx = (pts[i][0] + pts[i + 1][0]) / 2 * W, my = (pts[i][1] + pts[i + 1][1]) / 2 * H;
-        o.quadraticCurveTo(pts[i][0] * W, pts[i][1] * H, mx, my);
-      }
-      o.lineTo(pts.at(-1)[0] * W, pts.at(-1)[1] * H);
+      for (let i = 1; i < pts.length; i++) o.lineTo(pts[i][0] * W, pts[i][1] * H);
       o.stroke();
     }
     o.restore();
@@ -258,13 +285,13 @@ function replayStrokes(L) {
 function drawBbox(cv) {
   const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
   let x1 = 1e9, y1 = 1e9, x2 = -1, y2 = -1;
-  for (let y = 0; y < cv.height; y += 2) for (let x = 0; x < cv.width; x += 2)
+  for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++)
     if (d[(y * cv.width + x) * 4 + 3] > 8) { if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y; }
-  return x2 < 0 ? { x: 0, y: 0, w: 40, h: 40 } : { x: x1, y: y1, w: x2 - x1 + 2, h: y2 - y1 + 2 };
+  return x2 < 0 ? { x: 0, y: 0, w: 0, h: 0 } : { x: x1, y: y1, w: x2 - x1 + 1, h: y2 - y1 + 1 };
 }
 function drawDrawLayer(L, W, H) {
   ensureDrawCv(L, W, H);
-  const cx = W * lx(L.x), cy = H * lx(L.y);
+  const cx = W * coord(L.x), cy = H * coord(L.y);
   const sx = L.sx || 1, sy = L.sy || 1;
   ctx.save();
   ctx.translate(cx, cy);
@@ -275,9 +302,8 @@ function drawDrawLayer(L, W, H) {
   ctx.restore();
   ctx.globalAlpha = 1;
   const bb = L.bbox;
-  selBox(L, cx + (bb.x + bb.w / 2 - W / 2) * sx - bb.w * sx / 2 - 8,
-            cy + (bb.y + bb.h / 2 - H / 2) * sy - bb.h * sy / 2 - 8,
-            bb.w * sx + 16, bb.h * sy + 16);
+  selBox(L, bb.x - W / 2 - 8 / sx, bb.y - H / 2 - 8 / sy,
+    bb.w + 16 / sx, bb.h + 16 / sy, W, H);
 }
 function starPath(r, points) {
   for (let i = 0; i < points * 2; i++) {
@@ -309,29 +335,37 @@ function checkFile(file) {
 }
 function loadImageFile(file) {
   if (!checkFile(file)) return false;
+  const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
+    URL.revokeObjectURL(url);
     record();
-    state.img = { el: img, src: file.name, zoom: 1, x: .5, y: .5 };
-    $('imgZoom').value = 100;
+    state.img = { el: img, src: file.name, zoom: 1, x: .5, y: .5, f: { b: 100, c: 100, s: 100, bl: 0 } };
     $('canvasWrap').classList.remove('noimg');
+    syncImageControls();
     render();
     toast(`${file.name} 불러왔어요`);
   };
-  img.onerror = () => toast('이미지를 읽지 못했어요 — 파일이 깨졌을 수 있습니다', 'err');
-  img.src = URL.createObjectURL(file);
+  img.onerror = () => { URL.revokeObjectURL(url); toast('이미지를 읽지 못했어요 — 파일이 깨졌을 수 있습니다', 'err'); };
+  img.src = url;
   return true;
 }
 // 오버레이 이미지 → img 레이어로 추가
 function loadOverlayFile(file) {
   if (!checkFile(file)) return;
+  addImageLayerFile(file, file.name);
+}
+function addImageLayerFile(file, label) {
+  const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
-    addLayer({ type: 'img', el: img, src: file.name, dataURL: img.src, x: .5, y: .5, w: .4, rot: 0, op: 100 });
-    toast('사진을 레이어로 추가했어요 — 드래그로 옮기세요');
+    const dataURL = rasterize(img, 1200);
+    URL.revokeObjectURL(url);
+    addLayer({ type: 'img', el: img, src: label, dataURL, x: .5, y: .5, w: .4, rot: 0, op: 100 });
+    toast('이미지를 레이어로 추가했어요 — 드래그로 옮기세요');
   };
-  img.onerror = () => toast('이미지를 읽지 못했어요', 'err');
-  img.src = URL.createObjectURL(file);
+  img.onerror = () => { URL.revokeObjectURL(url); toast('이미지를 읽지 못했어요', 'err'); };
+  img.src = url;
 }
 $('imgBtn').onclick = () => $('imgInput').click();
 $('ovBtn').onclick = () => $('ovInput').click();
@@ -339,19 +373,16 @@ $('imgInput').addEventListener('change', (e) => { loadImageFile(e.target.files[0
 $('ovInput').addEventListener('change', (e) => { loadOverlayFile(e.target.files[0]); e.target.value = ''; });
 
 // 클립보드 붙여넣기 — 스꾸(seukku.cc) 같은 스티커 사이트에서 "복사"한 이미지가 바로 레이어로 추가됨
+const PASTE_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'];
 document.addEventListener('paste', (e) => {
   for (const item of e.clipboardData?.items || []) {
     if (!item.type.startsWith('image/')) continue;
     const file = item.getAsFile();
     e.preventDefault();
-    if (!checkFile(file)) return;
-    const img = new Image();
-    img.onload = () => {
-      addLayer({ type: 'img', el: img, src: '붙여넣은 이미지', dataURL: img.src, x: .5, y: .5, w: .4 });
-      toast('붙여넣은 이미지를 레이어로 추가했어요');
-      document.querySelector('[data-panel="layer"]').click();
-    };
-    img.src = URL.createObjectURL(file);
+    if (!file || !PASTE_IMAGE_TYPES.includes(file.type)) { toast('붙여넣기는 PNG·JPEG·WebP·GIF·AVIF 이미지가 가능해요', 'err'); return; }
+    if (!file.size || file.size > MAX_IMG_BYTES) { toast('붙여넣은 이미지가 비었거나 12MB를 넘어요', 'err'); return; }
+    addImageLayerFile(file, '붙여넣은 이미지');
+    document.querySelector('[data-panel="layer"]').click();
     return;
   }
 });
@@ -361,6 +392,16 @@ for (const ev of ['dragenter', 'dragover']) wrap.addEventListener(ev, (e) => { e
 for (const ev of ['dragleave', 'drop']) wrap.addEventListener(ev, (e) => { e.preventDefault(); wrap.classList.remove('dragover'); });
 wrap.addEventListener('drop', (e) => loadImageFile(e.dataTransfer.files[0]));
 $('imgZoom').addEventListener('input', () => { if (state.img) { state.img.zoom = $('imgZoom').value / 100; render(); } });
+function syncImageControls() {
+  const enabled = !!state.img;
+  ['imgZoom', 'fBri', 'fCon', 'fSat', 'fBlu', 'bgTol', 'bgRemoveBtn'].forEach(id => { $(id).disabled = !enabled; });
+  const f = state.img?.f || { b: 100, c: 100, s: 100, bl: 0 };
+  for (const [id, value, out] of [['fBri', f.b, 'fbVal'], ['fCon', f.c, 'fcVal'], ['fSat', f.s, 'fsVal'], ['fBlu', f.bl, 'fblVal']]) {
+    $(id).value = value; $(out).textContent = value;
+  }
+  $('imgZoom').value = Math.round((state.img?.zoom || 1) * 100);
+  $('ovBgRemove').disabled = selLayer()?.type !== 'img';
+}
 
 // ----- 배경 자동 제거 (모서리 플러드필) -----
 function removeBg(imgEl, tol) {
@@ -419,6 +460,7 @@ function applyBgRemove(target) {
   }
 }
 $('bgTol').addEventListener('input', () => { $('tolVal').textContent = $('bgTol').value; });
+$('penSize').addEventListener('input', () => { $('pwVal').textContent = $('penSize').value; });
 $('bgRemoveBtn').onclick = () => applyBgRemove('base');
 $('ovBgRemove').onclick = () => applyBgRemove('layer');
 
@@ -445,8 +487,10 @@ $('presetRow').addEventListener('click', (e) => {
   p.deco(o, 1080, 1080);
   const img = new Image();
   img.onload = () => {
-    state.img = { el: img, src: `프리셋:${e.target.dataset.preset}`, zoom: 1, x: .5, y: .5, dataURL: img.src };
+    record();
+    state.img = { el: img, src: `프리셋:${e.target.dataset.preset}`, zoom: 1, x: .5, y: .5, dataURL: img.src, f: { b: 100, c: 100, s: 100, bl: 0 } };
     $('canvasWrap').classList.remove('noimg');
+    syncImageControls();
     render();
     toast(`${e.target.textContent} 배경 적용`);
   };
@@ -480,6 +524,7 @@ function renderLayerList() {
     li.onclick = () => selectLayer(L.id);
     li.querySelector('.li-del').onclick = (e) => {
       e.stopPropagation();
+      record();
       state.layers = state.layers.filter(x => x.id !== L.id);
       if (state.sel === L.id) state.sel = state.layers.at(-1)?.id ?? null;
       $('layerEditor').hidden = !selLayer();
@@ -492,7 +537,7 @@ function selectLayer(id) {
   state.sel = id;
   const L = selLayer();
   $('layerEditor').hidden = !L;
-  if (!L) { renderLayerList(); render(); return; }
+  if (!L) { syncImageControls(); renderLayerList(); render(); return; }
   // 공통
   $('txtX').value = Math.round((L.x ?? .5) * 100); $('xVal').textContent = Math.round((L.x ?? .5) * 100);
   $('txtY').value = Math.round((L.y ?? .5) * 100); $('yVal').textContent = Math.round((L.y ?? .5) * 100);
@@ -501,6 +546,7 @@ function selectLayer(id) {
   $('textFields').hidden = L.type !== 'text';
   $('imgFields').hidden = L.type !== 'img';
   $('shapeFields').hidden = L.type !== 'shape';
+  syncImageControls();
   if (L.type === 'text') {
     $('txtContent').value = L.text;
     $('txtFont').value = L.font;
@@ -548,6 +594,7 @@ $('layerDown').onclick = () => moveLayer(-1);
 $('layerReset').onclick = () => onEdit(L => { L.sx = 1; L.sy = 1; L.rot = 0; $('layRot').value = 0; $('rotVal').textContent = 0; });
 $('layerDel').onclick = () => {
   const L = selLayer(); if (!L) return;
+  record();
   state.layers = state.layers.filter(x => x.id !== L.id);
   state.sel = state.layers.at(-1)?.id ?? null;
   selectLayer(state.sel);
@@ -556,6 +603,7 @@ function moveLayer(dir) {
   const i = state.layers.findIndex(l => l.id === state.sel);
   const j = i + dir;
   if (i < 0 || j < 0 || j >= state.layers.length) return;
+  record();
   [state.layers[i], state.layers[j]] = [state.layers[j], state.layers[i]];
   renderLayerList(); render();
 }
@@ -596,7 +644,7 @@ $('shapeGrid').addEventListener('click', (e) => {
 
 // ----- 스티커 라이브러리 -----
 const STICKERS = {
-  '실사': ['real-cloud.png', 'real-cloud2.png', 'real-sun.png', 'real-moon.png', 'real-mountain.png', 'real-wave.png', 'real-tree.png', 'real-flower.png', 'real-star.png', 'real-rainbow.png', 'real-balloon.png', 'real-gift.png'],
+  '입체 일러스트': ['real-cloud.png', 'real-cloud2.png', 'real-sun.png', 'real-moon.png', 'real-mountain.png', 'real-wave.png', 'real-tree.png', 'real-flower.png', 'real-star.png', 'real-rainbow.png', 'real-balloon.png', 'real-gift.png'],
   '하늘': ['cloud.svg', 'sun.svg', 'moon.svg', 'star.svg'],
   '반짝임': ['sparkle.svg', 'lightning.svg', 'star.svg', 'meteor.svg'],
   '자연': ['wave.svg', 'tree.svg', 'cloud.svg'],
@@ -683,14 +731,17 @@ function strokeDraw(L, o, from, to) {
   const [W, H] = [L.cv.width, L.cv.height];
   o.save();
   o.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
-  o.strokeStyle = stroke.color; o.lineWidth = stroke.size;
+  o.strokeStyle = stroke.color; o.fillStyle = stroke.color; o.lineWidth = stroke.size;
   o.lineCap = 'round'; o.lineJoin = 'round';
-  o.beginPath(); o.moveTo(from[0] * W, from[1] * H); o.lineTo(to[0] * W, to[1] * H); o.stroke();
+  o.beginPath();
+  if (from[0] === to[0] && from[1] === to[1]) { o.arc(from[0] * W, from[1] * H, stroke.size / 2, 0, 7); o.fill(); }
+  else { o.moveTo(from[0] * W, from[1] * H); o.lineTo(to[0] * W, to[1] * H); o.stroke(); }
   o.restore();
 }
 
 // ----- 캔버스 드래그 -----
 let drag = null;
+function capturePointer(e) { try { board.setPointerCapture(e.pointerId); } catch {} }
 board.addEventListener('pointerdown', (e) => {
   const r = board.getBoundingClientRect();
   const px = (e.clientX - r.left) / r.width * board.width;
@@ -703,8 +754,9 @@ board.addEventListener('pointerdown', (e) => {
       stroke = { pts: [[px / board.width, py / board.height]], size: +$('penSize').value, color: $('penColor').value, erase: $('penMode').value === 'erase' };
       markBase();
       L.strokes.push(stroke);
+      strokeDraw(L, L.cv.getContext('2d'), stroke.pts[0], stroke.pts[0]);
       drag = { kind: 'pen', id: L.id };
-      board.setPointerCapture(e.pointerId);
+      capturePointer(e);
       board.classList.add('grabbing');
       render();
       return;
@@ -716,12 +768,23 @@ board.addEventListener('pointerdown', (e) => {
     for (const hb of handleBoxes) {
       if (px >= hb.x && px <= hb.x + hb.w && py >= hb.y && py <= hb.y + hb.h) {
         markBase();
-        const sb = layerBoxes.find(x => x.id === selL.id);
-        // 레이어 중심↔박스 중심 오프셋 — 비율 바뀌어도 콘텐츠 위치가 튀지 않게
-        drag = { kind: 'resize', dir: hb.dir, id: selL.id, ssx: selL.sx || 1, ssy: selL.sy || 1,
-                 box: { x: sb.x, y: sb.y, w: sb.w, h: sb.h },
-                 off: { x: selL.x * board.width - (sb.x + sb.w / 2), y: selL.y * board.height - (sb.y + sb.h / 2) } };
-        board.setPointerCapture(e.pointerId);
+        const g = layerBoxes.find(x => x.id === selL.id);
+        const { x, y, w, h } = g.local, mx = x + w / 2, my = y + h / 2;
+        const anchors = {
+          e: [{ x, y: my }, { x: x + w, y: my }, 'x'],
+          w: [{ x: x + w, y: my }, { x, y: my }, 'x'],
+          s: [{ x: mx, y }, { x: mx, y: y + h }, 'y'],
+          n: [{ x: mx, y: y + h }, { x: mx, y }, 'y'],
+          se: [{ x, y }, { x: x + w, y: y + h }, 'xy'],
+          sw: [{ x: x + w, y }, { x, y: y + h }, 'xy'],
+          ne: [{ x, y: y + h }, { x: x + w, y }, 'xy'],
+          nw: [{ x: x + w, y: y + h }, { x, y }, 'xy'],
+        }[hb.dir];
+        const [anchor, active, axes] = anchors;
+        const anchorWorld = framePoint(g.ox, g.oy, anchor.x, anchor.y, g.sx, g.sy, g.rot);
+        drag = { kind: 'resize', id: selL.id, dir: hb.dir, axes, g, anchor, active, anchorWorld,
+                 sx0: g.sx, sy0: g.sy, x0: g.ox, y0: g.oy };
+        capturePointer(e);
         board.classList.add('grabbing');
         return;
       }
@@ -730,11 +793,12 @@ board.addEventListener('pointerdown', (e) => {
   // 2) 레이어 이동 (위쪽부터)
   for (let i = layerBoxes.length - 1; i >= 0; i--) {
     const b = layerBoxes[i];
-    if (b.w && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
+    if (b.local && hitLayerBox(b, px, py)) {
+      const L = state.layers.find(l => l.id === b.id);
       selectLayer(b.id);
       markBase();
-      drag = { kind: 'layer', id: b.id };
-      board.setPointerCapture(e.pointerId);
+      drag = { kind: 'layer', id: b.id, sx: L.x, sy: L.y, px, py };
+      capturePointer(e);
       board.classList.add('grabbing');
       return;
     }
@@ -744,7 +808,7 @@ board.addEventListener('pointerdown', (e) => {
   if (state.img) {
     markBase();
     drag = { kind: 'img', sx: state.img.x, sy: state.img.y, px, py };
-    board.setPointerCapture(e.pointerId);
+    capturePointer(e);
     board.classList.add('grabbing');
   }
 });
@@ -764,8 +828,8 @@ board.addEventListener('pointermove', (e) => {
   } else if (drag.kind === 'layer') {
     const L = state.layers.find(l => l.id === drag.id);
     if (L) {
-      L.x = lx(px / board.width);
-      L.y = lx(py / board.height);
+      L.x = lx(drag.sx + (px - drag.px) / board.width);
+      L.y = lx(drag.sy + (py - drag.py) / board.height);
       $('txtX').value = Math.round(L.x * 100); $('xVal').textContent = Math.round(L.x * 100);
       $('txtY').value = Math.round(L.y * 100); $('yVal').textContent = Math.round(L.y * 100);
       render();
@@ -773,34 +837,32 @@ board.addEventListener('pointermove', (e) => {
   } else if (drag.kind === 'resize') {
     const L = state.layers.find(l => l.id === drag.id);
     if (L) {
-      const b = drag.box;
-      const clamp = (v) => Math.max(.05, Math.min(6, v));
-      let fx = 1, fy = 1;
-      if (drag.dir.includes('e')) fx = (px - b.x) / b.w;            // 왼쪽 변 고정
-      if (drag.dir.includes('w')) fx = (b.x + b.w - px) / b.w;      // 오른쪽 변 고정
-      if (drag.dir.includes('s')) fy = (py - b.y) / b.h;            // 위쪽 변 고정
-      if (drag.dir.includes('n')) fy = (b.y + b.h - py) / b.h;      // 아래쪽 변 고정
-      if (drag.dir.length === 2) {                                  // 모서리 — 비율 유지
-        const f = (fx + fy) / 2;
-        fx = fy = f;
-      }
-      const nsx = clamp(drag.ssx * fx), nsy = clamp(drag.ssy * fy);
-      const nw = b.w * nsx / drag.ssx, nh = b.h * nsy / drag.ssy;
-      const ncx = drag.dir.includes('e') ? b.x + nw / 2
-               : drag.dir.includes('w') ? b.x + b.w - nw / 2
-               : b.x + b.w / 2;
-      const ncy = drag.dir.includes('s') ? b.y + nh / 2
-               : drag.dir.includes('n') ? b.y + b.h - nh / 2
-               : b.y + b.h / 2;
-      L.sx = nsx; L.sy = nsy;
-      // 박스 중심에서 레이어 중심으로 — 오프셋도 스케일에 따라 같이 커지므로 위치가 안 튐
-      L.x = lx((ncx - drag.off.x * nsx / drag.ssx) / board.width);
-      L.y = lx((ncy - drag.off.y * nsy / drag.ssy) / board.height);
+      const { g, anchor, active, axes, sx0, sy0, x0, y0, anchorWorld } = drag;
+      const q = toFrame(px, py, x0, y0, g.rot);
+      const ax = anchor.x * sx0, ay = anchor.y * sy0;
+      let sx = sx0, sy = sy0;
+      if (axes === 'xy') {
+        const vx = (active.x - anchor.x) * sx0, vy = (active.y - anchor.y) * sy0;
+        const dx = q.x - ax, dy = q.y - ay;
+        const f = (dx * vx + dy * vy) / (vx * vx + vy * vy);
+        sx = sx0 * f; sy = sy0 * f;
+      } else if (axes === 'x') sx = (q.x - ax) / (active.x - anchor.x);
+      else sy = (q.y - ay) / (active.y - anchor.y);
+      const clampScale = v => Math.max(.05, Math.min(6, v));
+      sx = clampScale(sx); sy = clampScale(sy);
+      const a = g.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+      const ux = anchor.x * sx, uy = anchor.y * sy;
+      L.sx = sx; L.sy = sy;
+      L.x = coord((anchorWorld.x - (ux * c - uy * s)) / board.width);
+      L.y = coord((anchorWorld.y - (ux * s + uy * c)) / board.height);
+      const xp = Math.round(lx(L.x) * 100), yp = Math.round(lx(L.y) * 100);
+      $('txtX').value = xp; $('xVal').textContent = xp;
+      $('txtY').value = yp; $('yVal').textContent = yp;
       render();
     }
-  } else if (state.img) {
-    state.img.x = lx(drag.sx - (px - drag.px) / board.width * .5);
-    state.img.y = lx(drag.sy - (py - drag.py) / board.height * .5);
+  } else if (drag.kind === 'img' && state.img) {
+    state.img.x = lx(drag.sx + (px - drag.px) / board.width);
+    state.img.y = lx(drag.sy + (py - drag.py) / board.height);
     render();
   }
 });
@@ -836,15 +898,18 @@ document.querySelectorAll('.ptab').forEach(t => t.addEventListener('click', () =
   $('pane-' + t.dataset.panel).classList.add('on');
 }));
 function download(mime, ext, quality) {
+  render(false);
   board.toBlob((blob) => {
+    render();
     if (!blob) { toast('저장 실패 — 다시 시도해 주세요', 'err'); return; }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `zzal-${state.ratio.replace(':', 'x')}-${Date.now().toString(36)}.${ext}`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     toast(`${ext.toUpperCase()}로 저장했어요 (메타데이터 없이 새로 인코딩됨)`);
   }, mime, quality);
+  render();
 }
 $('dlPng').onclick = () => download('image/png', 'png');
 $('dlJpg').onclick = () => download('image/jpeg', 'jpg', .92);
@@ -862,6 +927,10 @@ $('fBlu').addEventListener('input', () => { $('fblVal').textContent = $('fBlu').
 
 // ----- 되돌리기 / 다시 실행 -----
 const hist = [], fut = [];
+function updateHistoryControls() {
+  $('undoBtn').disabled = hist.length === 0 && !pendBase;
+  $('redoBtn').disabled = fut.length === 0;
+}
 function snapshot() {
   return {
     ratio: state.ratio, bg: state.bg,
@@ -884,27 +953,35 @@ function restore(s) {
   setAr();
   $('canvasWrap').classList.toggle('noimg', !state.img);
   $('bgCustom').value = state.bg;
+  syncImageControls();
   selectLayer(state.sel && state.layers.some(l => l.id === state.sel) ? state.sel : state.layers.at(-1)?.id ?? null);
   render();
 }
 // 기준 스냅샷: 변경 직전에 찍고, 동작이 끝나면 커밋 (undo는 변경 전 상태를 복원)
 let pendBase = null;
-function markBase() { if (!pendBase) pendBase = snapshot(); }
+function markBase() { if (!pendBase) pendBase = snapshot(); updateHistoryControls(); }
 function commitBase() {
-  if (!pendBase) return;
+  if (!pendBase) { updateHistoryControls(); return; }
   hist.push(pendBase); pendBase = null;
   if (hist.length > 40) hist.shift();
   fut.length = 0;
+  updateHistoryControls();
 }
 function record() { markBase(); commitBase(); }   // 한 방에 기록 (버튼성 액션)
-function undo() { commitBase(); if (!hist.length) { toast('더 되돌릴 게 없어요', 'err'); return; } fut.push(snapshot()); restore(hist.pop()); }
-function redo() { if (!fut.length) { toast('다시 실행할 게 없어요', 'err'); return; } hist.push(snapshot()); restore(fut.pop()); }
+function undo() { commitBase(); if (!hist.length) return; fut.push(snapshot()); restore(hist.pop()); updateHistoryControls(); }
+function redo() { if (!fut.length) return; hist.push(snapshot()); restore(fut.pop()); updateHistoryControls(); }
 $('undoBtn').onclick = undo;
 $('redoBtn').onclick = redo;
+updateHistoryControls();
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const target = e.target;
+  const textEntry = target.tagName === 'TEXTAREA' || target.isContentEditable ||
+    (target.tagName === 'INPUT' && !['range', 'color'].includes(target.type));
+  if (textEntry) return;
   if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   else if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
+  else if (e.key === 'Escape' && target.tagName !== 'SELECT' && state.sel) selectLayer(null);
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel && !['INPUT', 'SELECT', 'BUTTON'].includes(target.tagName)) { e.preventDefault(); $('layerDel').click(); }
 });
 // 패널에서 제스처 시작(pointerdown/focus) 시 기준을 찍고 끝날 때 커밋
 document.querySelector('.panel').addEventListener('pointerdown', markBase, true);
@@ -942,6 +1019,7 @@ function snapshotState(imgDataURL) {
     img: state.img ? {
       src: state.img.src, zoom: state.img.zoom, x: state.img.x, y: state.img.y,
       dataURL: imgDataURL ?? state.img.dataURL ?? rasterize(state.img.el, 800),
+      f: { b: state.img.f?.b ?? 100, c: state.img.f?.c ?? 100, s: state.img.f?.s ?? 100, bl: state.img.f?.bl ?? 0 },
     } : null,
     layers: state.layers.map(L => {
       const c = { ...L };
@@ -971,7 +1049,7 @@ function applyState(s) {
   if (s.img?.dataURL) {
     pending.push(new Promise(res => {
       const img = new Image();
-      img.onload = () => { state.img = { el: img, src: s.img.src, zoom: s.img.zoom, x: s.img.x, y: s.img.y, dataURL: s.img.dataURL }; $('canvasWrap').classList.remove('noimg'); res(); };
+      img.onload = () => { state.img = { el: img, src: s.img.src, zoom: s.img.zoom, x: s.img.x, y: s.img.y, dataURL: s.img.dataURL, f: s.img.f || { b: 100, c: 100, s: 100, bl: 0 } }; $('canvasWrap').classList.remove('noimg'); syncImageControls(); res(); };
       img.onerror = () => res();
       img.src = s.img.dataURL;
     }));
@@ -994,7 +1072,9 @@ function currentThumb() {
   const [W, H] = canvasWH();
   const s = 128 / Math.max(W, H);
   off.width = W * s; off.height = H * s;
+  render(false);
   off.getContext('2d').drawImage(board, 0, 0, off.width, off.height);
+  render();
   return off.toDataURL('image/jpeg', .6);
 }
 function renderTplList() {
@@ -1070,13 +1150,7 @@ $('canvasWrap').classList.add('noimg');
 applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
 setAr();
 renderStickerPanel();
+syncImageControls();
+renderLayerList();
+selectLayer(null);
 document.fonts.ready.then(render);
-addStartup();
-function addStartup() {
-  addLayer({ type: 'text', text: '짤·카드 스튜디오', x: .5, y: .16, size: 78, color: '#221B38',
-    font: "'Black Han Sans'", weight: 400, italic: false, ls: 0, outline: false, fx: 'solid' });
-  addLayer({ type: 'text', text: '이미지와 문구를 조합해 나만의 짤 만들기', x: .5, y: .82, size: 40, color: '#6B6483',
-    font: "'Jua'", weight: 400, italic: false, ls: 0, outline: false, fx: 'solid' });
-  selectLayer(state.layers[0].id);
-  record();   // 초기 상태가 히스토리 기준점
-}

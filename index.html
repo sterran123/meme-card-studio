@@ -14,8 +14,8 @@
   <header class="topbar">
     <p class="logo">짤·카드<span class="logo-dot"> 스튜디오</span></p>
     <div class="top-actions">
-      <button class="btn-ghost" id="undoBtn" title="되돌리기 (Ctrl+Z)">↶</button>
-      <button class="btn-ghost" id="redoBtn" title="다시 실행 (Ctrl+Y)">↷</button>
+      <button class="btn-ghost" id="undoBtn" title="되돌리기 (Ctrl+Z)" aria-label="되돌리기">↶</button>
+      <button class="btn-ghost" id="redoBtn" title="다시 실행 (Ctrl+Y)" aria-label="다시 실행">↷</button>
       <button class="btn-ghost" id="themeBtn" title="테마 전환">☀️ 라이트</button>
       <button class="btn-ghost" id="jsonExport">템플릿 내보내기</button>
       <button class="btn-ghost" id="jsonImportBtn">JSON 가져오기</button>
@@ -50,12 +50,13 @@
 
       <!-- 이미지 탭 -->
       <div class="pane on" id="pane-image">
-        <button class="btn-primary wide" id="imgBtn">이미지 불러오기</button>
+        <button class="btn-primary wide" id="imgBtn">배경 이미지 불러오기</button>
         <input type="file" id="imgInput" accept="image/png,image/jpeg" hidden>
         <input type="file" id="ovInput" accept="image/png,image/jpeg" hidden>
         <input type="file" id="jsonInput" accept="application/json,.json" hidden>
         <button class="btn-ghost wide" id="ovBtn">이미지 위에 사진 올리기 (PNG·JPG)</button>
-        <p class="paste-hint">다른 곳에서 <b>이미지를 복사</b>했다면 편집기에서 <b>Ctrl+V</b>로 바로 붙여넣기</p>
+        <a class="btn-ghost wide source-link" href="https://seukku.cc/" target="_blank" rel="noopener noreferrer">스꾸에서 실제 스티커 고르기 ↗</a>
+        <p class="paste-hint">스꾸의 복사는 <b>개인·비영리 용도</b>로만 사용하세요.<br>복사 후 <b>Ctrl+V</b> · 클립보드가 비면 보유한 PNG/JPG를 위 버튼으로 추가</p>
         <p class="field-label">확대 / 축소</p>
         <input type="range" id="imgZoom" min="50" max="300" value="100" aria-label="이미지 확대">
         <p class="field-label">이미지 보정 (필터)</p>
