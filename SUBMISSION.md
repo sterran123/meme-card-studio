@@ -6,7 +6,7 @@
 
 ## 소스 주소
 
-- https://github.com/sterran123/meme-card-studio/commit/7cc76ef81486b953ccb3c05de09c3c790a1bdaed
+- https://github.com/sterran123/meme-card-studio/commit/ddf7b116eb50e48aebbad984ab7dae3a41ccd614
 
 ## 짧은 확인 방법
 
