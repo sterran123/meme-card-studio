@@ -7,13 +7,14 @@
   <meta name="description" content="이미지와 문구를 조합해 밈·카드·SNS 게시물을 만드는 브라우저 편집기. 1:1·4:5·9:16 비율 내려받기.">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&family=Press+Start+2P&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&family=Nanum+Gothic:wght@400;700;800&family=Gamja+Flower&family=Gowun+Dodum&family=Press+Start+2P&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
     <p class="logo">짤·카드<span class="logo-dot"> 스튜디오</span></p>
     <div class="top-actions">
+      <button class="btn-ghost" id="themeBtn" title="테마 전환">☀️ 라이트</button>
       <button class="btn-ghost" id="jsonExport">템플릿 내보내기</button>
       <button class="btn-ghost" id="jsonImportBtn">JSON 가져오기</button>
       <button class="btn-primary" id="dlPng">PNG 저장</button>
@@ -33,14 +34,15 @@
         <canvas id="board" width="1080" height="1080" aria-label="편집 미리보기 캔버스"></canvas>
         <div class="drop-hint" id="dropHint">이미지를 여기에 끌어다 놓거나<br><b>이미지 불러오기</b>를 누르세요</div>
       </div>
-      <p class="stage-hint">문구는 캔버스에서 <b>드래그로 이동</b> · 배경 이미지도 드래그로 위치 조정</p>
+      <p class="stage-hint">요소는 캔버스에서 <b>드래그로 이동</b> · 배경 이미지도 드래그로 위치 조정</p>
     </section>
 
     <!-- 오른쪽: 컨트롤 패널 -->
     <aside class="panel">
       <nav class="panel-tabs" aria-label="편집 메뉴">
         <button class="ptab on" data-panel="image">이미지</button>
-        <button class="ptab" data-panel="text">문구</button>
+        <button class="ptab" data-panel="layer">레이어</button>
+        <button class="ptab" data-panel="add">추가</button>
         <button class="ptab" data-panel="template">템플릿</button>
       </nav>
 
@@ -48,9 +50,14 @@
       <div class="pane on" id="pane-image">
         <button class="btn-primary wide" id="imgBtn">이미지 불러오기</button>
         <input type="file" id="imgInput" accept="image/png,image/jpeg" hidden>
+        <input type="file" id="ovInput" accept="image/png,image/jpeg" hidden>
         <input type="file" id="jsonInput" accept="application/json,.json" hidden>
+        <button class="btn-ghost wide" id="ovBtn">이미지 위에 사진 올리기 (PNG·JPG)</button>
         <p class="field-label">확대 / 축소</p>
         <input type="range" id="imgZoom" min="50" max="300" value="100" aria-label="이미지 확대">
+        <p class="field-label">배경 자동 제거 <output id="tolVal">32</output></p>
+        <input type="range" id="bgTol" min="5" max="80" value="32" aria-label="제거 허용 오차">
+        <button class="btn-ghost wide" id="bgRemoveBtn">모서리 배경 지우기 (단색 배경에 적합)</button>
         <p class="field-label">배경색 (이미지 없거나 빈틈에 표시)</p>
         <div class="color-row" id="bgColors">
           <button class="swatch on" style="--c:#17141F" data-c="#17141F" aria-label="검정 보라"></button>
@@ -65,40 +72,121 @@
           <button class="preset" data-preset="night">밤하늘</button>
           <button class="preset" data-preset="sunset">노을</button>
           <button class="preset" data-preset="mint">민트</button>
+          <button class="preset" data-preset="paper">종이</button>
         </div>
       </div>
 
-      <!-- 문구 탭 -->
-      <div class="pane" id="pane-text">
+      <!-- 레이어 탭 -->
+      <div class="pane" id="pane-layer">
         <button class="btn-ghost wide" id="addLayer">+ 문구 추가</button>
         <ul class="layer-list" id="layerList"></ul>
         <div class="layer-editor" id="layerEditor" hidden>
-          <textarea id="txtContent" rows="3" maxlength="300" placeholder="문구 입력…"></textarea>
-          <p class="field-label">폰트</p>
-          <select id="txtFont" aria-label="폰트">
-            <option value="'Black Han Sans'">블랙한산스 (밈체)</option>
-            <option value="'Jua'">주아 (둥글)</option>
-            <option value="'Pretendard Variable'">프리텐다드 (깔끔)</option>
-          </select>
-          <p class="field-label">크기 <output id="sizeVal">64</output></p>
-          <input type="range" id="txtSize" min="16" max="200" value="64" aria-label="문구 크기">
-          <p class="field-label">색</p>
-          <div class="color-row" id="txtColors">
-            <button class="swatch on" style="--c:#FFFFFF" data-c="#FFFFFF"></button>
-            <button class="swatch" style="--c:#FFD166" data-c="#FFD166"></button>
-            <button class="swatch" style="--c:#5CE0B3" data-c="#5CE0B3"></button>
-            <button class="swatch" style="--c:#FF6B5E" data-c="#FF6B5E"></button>
-            <button class="swatch" style="--c:#17141F" data-c="#17141F"></button>
-            <input type="color" id="txtCustom" value="#FFFFFF">
-          </div>
+          <!-- 공통 -->
           <div class="xy-row">
             <div><p class="field-label">가로 위치 <output id="xVal">50</output>%</p>
               <input type="range" id="txtX" min="0" max="100" value="50"></div>
             <div><p class="field-label">세로 위치 <output id="yVal">50</output>%</p>
               <input type="range" id="txtY" min="0" max="100" value="50"></div>
           </div>
-          <label class="check-row"><input type="checkbox" id="txtOutline" checked> 외곽선 (어떤 배경에서도 읽힘)</label>
+          <div class="xy-row" id="commonSize">
+            <div><p class="field-label">회전 <output id="rotVal">0</output>°</p>
+              <input type="range" id="layRot" min="-180" max="180" value="0"></div>
+            <div><p class="field-label">불투명도 <output id="opVal">100</output>%</p>
+              <input type="range" id="layOp" min="10" max="100" value="100"></div>
+          </div>
+          <div class="mini-actions">
+            <button class="btn-ghost" id="layerUp">위로</button>
+            <button class="btn-ghost" id="layerDown">아래로</button>
+            <button class="btn-ghost" id="layerDel">삭제</button>
+          </div>
+          <hr class="div">
+          <!-- 문구 전용 -->
+          <div id="textFields">
+            <textarea id="txtContent" rows="3" maxlength="300" placeholder="문구 입력…"></textarea>
+            <p class="field-label">폰트</p>
+            <select id="txtFont" aria-label="폰트">
+              <option value="'Black Han Sans'">블랙한산스 (밈체)</option>
+              <option value="'Jua'">주아 (둥글)</option>
+              <option value="'Pretendard Variable'">프리텐다드 (깔끔)</option>
+              <option value="'Nanum Gothic'">나눔고딕</option>
+              <option value="'Gamja Flower'">감자꽃 (손글씨)</option>
+              <option value="'Gowun Dodum'">고운돋움</option>
+              <option value="'Press Start 2P'">픽셀 (영문)</option>
+            </select>
+            <div class="xy-row">
+              <div><p class="field-label">크기 <output id="sizeVal">64</output></p>
+                <input type="range" id="txtSize" min="16" max="200" value="64"></div>
+              <div><p class="field-label">자간 <output id="lsVal">0</output></p>
+                <input type="range" id="txtLs" min="-4" max="30" value="0"></div>
+            </div>
+            <div class="mini-actions">
+              <select id="txtWeight" aria-label="굵기">
+                <option value="400">보통</option><option value="700">굵게</option><option value="900">아주 굵게</option>
+              </select>
+              <label class="check-row"><input type="checkbox" id="txtItalic"> 기울기</label>
+              <label class="check-row"><input type="checkbox" id="txtOutline" checked> 외곽선</label>
+            </div>
+            <p class="field-label">채우기</p>
+            <select id="txtFx" aria-label="효과">
+              <option value="solid">단색</option>
+              <option value="grad">그라데이션</option>
+              <option value="glitch">글리치</option>
+            </select>
+            <div class="color-row" id="txtColors">
+              <button class="swatch on" style="--c:#FFFFFF" data-c="#FFFFFF"></button>
+              <button class="swatch" style="--c:#FFD166" data-c="#FFD166"></button>
+              <button class="swatch" style="--c:#5CE0B3" data-c="#5CE0B3"></button>
+              <button class="swatch" style="--c:#FF6B5E" data-c="#FF6B5E"></button>
+              <button class="swatch" style="--c:#17141F" data-c="#17141F"></button>
+              <input type="color" id="txtCustom" value="#FFFFFF">
+            </div>
+            <div class="color-row" id="gradRow" hidden>
+              <input type="color" id="gradA" value="#FFD166" title="그라데이션 시작">
+              <input type="color" id="gradB" value="#FF6B5E" title="그라데이션 끝">
+              <p class="field-label" style="margin:0">각도 <input type="range" id="gradAng" min="0" max="360" value="180" style="width:90px;vertical-align:middle"></p>
+            </div>
+          </div>
+          <!-- 이미지 레이어 전용 -->
+          <div id="imgFields" hidden>
+            <p class="field-label">크기 <output id="ovSizeVal">40</output>%</p>
+            <input type="range" id="ovSize" min="5" max="200" value="40">
+            <button class="btn-ghost wide" id="ovBgRemove">이 이미지도 배경 지우기</button>
+          </div>
+          <!-- 도형 전용 -->
+          <div id="shapeFields" hidden>
+            <p class="field-label">크기 <output id="shSizeVal">30</output>%</p>
+            <input type="range" id="shSize" min="5" max="100" value="30">
+            <p class="field-label">채우기</p>
+            <select id="shFx"><option value="solid">단색</option><option value="grad">그라데이션</option></select>
+            <div class="color-row" id="shColors">
+              <button class="swatch on" style="--c:#8B7CFF" data-c="#8B7CFF"></button>
+              <button class="swatch" style="--c:#FFD166" data-c="#FFD166"></button>
+              <button class="swatch" style="--c:#5CE0B3" data-c="#5CE0B3"></button>
+              <button class="swatch" style="--c:#FF6B5E" data-c="#FF6B5E"></button>
+              <button class="swatch" style="--c:#FFFFFF" data-c="#FFFFFF"></button>
+              <input type="color" id="shCustom" value="#8B7CFF">
+            </div>
+            <div class="color-row" id="shGradRow" hidden>
+              <input type="color" id="shGradA" value="#8B7CFF"><input type="color" id="shGradB" value="#5CE0B3">
+            </div>
+          </div>
         </div>
+      </div>
+
+      <!-- 추가 탭 -->
+      <div class="pane" id="pane-add">
+        <p class="field-label">도형</p>
+        <div class="shape-grid" id="shapeGrid">
+          <button data-shape="rect">■ 사각</button>
+          <button data-shape="circle">● 원</button>
+          <button data-shape="tri">▲ 삼각</button>
+          <button data-shape="star">★ 별</button>
+          <button data-shape="bubble">💬 말풍선</button>
+          <button data-shape="burst">✦ 팡파레</button>
+        </div>
+        <p class="field-label">스티커</p>
+        <div class="sticker-cats" id="stickerCats"></div>
+        <div class="sticker-grid" id="stickerGrid"></div>
       </div>
 
       <!-- 템플릿 탭 -->
