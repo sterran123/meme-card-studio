@@ -14,6 +14,8 @@
   <header class="topbar">
     <p class="logo">짤·카드<span class="logo-dot"> 스튜디오</span></p>
     <div class="top-actions">
+      <button class="btn-ghost" id="undoBtn" title="되돌리기 (Ctrl+Z)">↶</button>
+      <button class="btn-ghost" id="redoBtn" title="다시 실행 (Ctrl+Y)">↷</button>
       <button class="btn-ghost" id="themeBtn" title="테마 전환">☀️ 라이트</button>
       <button class="btn-ghost" id="jsonExport">템플릿 내보내기</button>
       <button class="btn-ghost" id="jsonImportBtn">JSON 가져오기</button>
@@ -56,17 +58,27 @@
         <p class="paste-hint">다른 곳에서 <b>이미지를 복사</b>했다면 편집기에서 <b>Ctrl+V</b>로 바로 붙여넣기</p>
         <p class="field-label">확대 / 축소</p>
         <input type="range" id="imgZoom" min="50" max="300" value="100" aria-label="이미지 확대">
+        <p class="field-label">이미지 보정 (필터)</p>
+        <div class="xy-row">
+          <div><p class="field-label">밝기 <output id="fbVal">100</output>%</p><input type="range" id="fBri" min="40" max="180" value="100"></div>
+          <div><p class="field-label">대비 <output id="fcVal">100</output>%</p><input type="range" id="fCon" min="40" max="180" value="100"></div>
+        </div>
+        <div class="xy-row">
+          <div><p class="field-label">채도 <output id="fsVal">100</output>%</p><input type="range" id="fSat" min="0" max="200" value="100"></div>
+          <div><p class="field-label">흐림 <output id="fblVal">0</output></p><input type="range" id="fBlu" min="0" max="20" value="0"></div>
+        </div>
         <p class="field-label">배경 자동 제거 <output id="tolVal">32</output></p>
         <input type="range" id="bgTol" min="5" max="80" value="32" aria-label="제거 허용 오차">
         <button class="btn-ghost wide" id="bgRemoveBtn">모서리 배경 지우기 (단색 배경에 적합)</button>
         <p class="field-label">배경색 (이미지 없거나 빈틈에 표시)</p>
         <div class="color-row" id="bgColors">
-          <button class="swatch on" style="--c:#17141F" data-c="#17141F" aria-label="검정 보라"></button>
+          <button class="swatch on" style="--c:#FFFFFF" data-c="#FFFFFF" aria-label="흰색"></button>
+          <button class="swatch" style="--c:#17141F" data-c="#17141F" aria-label="검정 보라"></button>
           <button class="swatch" style="--c:#0E1B2E" data-c="#0E1B2E" aria-label="네이비"></button>
           <button class="swatch" style="--c:#3B1F4E" data-c="#3B1F4E" aria-label="자두"></button>
           <button class="swatch" style="--c:#123B2F" data-c="#123B2F" aria-label="청록"></button>
           <button class="swatch" style="--c:#F4EFFA" data-c="#F4EFFA" aria-label="밝은"></button>
-          <input type="color" id="bgCustom" value="#17141F" aria-label="직접 배경색">
+          <input type="color" id="bgCustom" value="#FFFFFF" aria-label="직접 배경색">
         </div>
         <p class="field-label">샘플 배경 (사용 권한: 자체 제작)</p>
         <div class="preset-row" id="presetRow">
@@ -185,6 +197,17 @@
           <button data-shape="star">★ 별</button>
           <button data-shape="bubble">💬 말풍선</button>
           <button data-shape="burst">✦ 팡파레</button>
+        </div>
+        <p class="field-label">자유 그리기</p>
+        <div id="penRow">
+          <div class="color-row">
+            <input type="color" id="penColor" value="#FF6B5E">
+            <select id="penMode" style="flex:1"><option value="pen">펜</option><option value="erase">지우개</option></select>
+          </div>
+          <p class="field-label">굵기 <output id="pwVal">14</output></p>
+          <input type="range" id="penSize" min="2" max="80" value="14">
+          <button class="btn-ghost wide" id="penStart">🖊 그리기 시작 / 캔버스에서 그리세요</button>
+          <button class="btn-primary wide" id="penDone" hidden>그리기 완료</button>
         </div>
         <p class="field-label">스티커</p>
         <div class="sticker-cats" id="stickerCats"></div>

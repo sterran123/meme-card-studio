@@ -7,11 +7,11 @@ const $ = (id) => document.getElementById(id);
 // ----- 상태 -----
 const RATIOS = { '1:1': [1080, 1080], '4:5': [1080, 1350], '9:16': [1080, 1920] };
 const MAX_IMG_BYTES = 12 * 1024 * 1024;
-const LAYER_TYPES = ['text', 'img', 'shape'];
+const LAYER_TYPES = ['text', 'img', 'shape', 'draw'];
 const state = {
   ratio: '1:1',
-  bg: '#17141F',
-  img: null,          // 배경 사진 { el, src, zoom, x, y, dataURL }
+  bg: '#FFFFFF',
+  img: null,          // 배경 사진 { el, src, zoom, x, y, dataURL, f:{b,c,s,bl} }
   layers: [],
   sel: null,
 };
@@ -33,13 +33,17 @@ function render() {
     const iw = state.img.el.naturalWidth, ih = state.img.el.naturalHeight;
     const cover = Math.max(W / iw, H / ih) * state.img.zoom;
     const dw = iw * cover, dh = ih * cover;
+    const f = state.img.f || {};
+    ctx.filter = `brightness(${f.b ?? 100}%) contrast(${f.c ?? 100}%) saturate(${f.s ?? 100}%) blur(${f.bl || 0}px)`;
     ctx.drawImage(state.img.el, W * state.img.x - dw / 2, H * state.img.y - dh / 2, dw, dh);
+    ctx.filter = 'none';
   }
   layerBoxes = [];
   for (const L of state.layers) {
     if (L.type === 'text') drawTextLayer(L, W, H);
     else if (L.type === 'img') drawImgLayer(L, W, H);
     else if (L.type === 'shape') drawShapeLayer(L, W, H);
+    else if (L.type === 'draw') drawDrawLayer(L, W, H);
   }
   // 선택 레이어 리사이즈 핸들 — 모서리=비율 유지, 변=한 축만
   handleBoxes = [];
@@ -115,7 +119,7 @@ function drawTextLayer(L, W, H) {
   if (L.outline) {
     ctx.lineWidth = Math.max(4, size * .09);
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(14,11,20,.85)';
+    ctx.strokeStyle = textOutlineColor(L.color);   // 글자 밝기에 따라 대비 외곽선
     lines.forEach((line, i) => ctx.strokeText(line, 0, (i - (lines.length - 1) / 2) * lh));
   }
   if (L.fx === 'glitch') { drawAll(-4, 0, 'rgba(92,224,255,.75)'); drawAll(4, 0, 'rgba(255,92,224,.75)'); }
@@ -194,6 +198,71 @@ function shapePath(shape, w, h) {
     ctx.moveTo(-w * .15, h * .2); ctx.lineTo(-w * .3, h / 2); ctx.lineTo(w * .02, h * .25); ctx.closePath();
   }
 }
+// 글자색 밝기에 따라 대비 외곽선 (밝은 글자→진한 외곽선, 어두운 글자→밝은 외곽선)
+function textOutlineColor(hex) {
+  const c = (hex || '#fff').replace('#', '');
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16) || 0);
+  return (r * .3 + g * .59 + b * .11) > 140 ? 'rgba(14,11,20,.85)' : 'rgba(255,255,255,.92)';
+}
+
+// --- 자유 그리기 레이어 (스트로크를 오프스크린에 굽고 합성) ---
+function ensureDrawCv(L, W, H) {
+  if (!L.cv || L.cvW !== W || L.cvH !== H) {
+    L.cv = document.createElement('canvas');
+    L.cv.width = W; L.cv.height = H;
+    L.cvW = W; L.cvH = H;
+    replayStrokes(L);
+  }
+}
+function replayStrokes(L) {
+  const o = L.cv.getContext('2d');
+  o.clearRect(0, 0, L.cv.width, L.cv.height);
+  const [W, H] = [L.cv.width, L.cv.height];
+  for (const s of L.strokes || []) {
+    o.save();
+    o.globalCompositeOperation = s.erase ? 'destination-out' : 'source-over';
+    o.strokeStyle = s.color; o.lineWidth = s.size;
+    o.lineCap = 'round'; o.lineJoin = 'round';
+    o.beginPath();
+    const pts = s.pts;
+    if (pts.length === 1) { o.arc(pts[0][0] * W, pts[0][1] * H, s.size / 2, 0, 7); o.fill(); }
+    else {
+      o.moveTo(pts[0][0] * W, pts[0][1] * H);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i][0] + pts[i + 1][0]) / 2 * W, my = (pts[i][1] + pts[i + 1][1]) / 2 * H;
+        o.quadraticCurveTo(pts[i][0] * W, pts[i][1] * H, mx, my);
+      }
+      o.lineTo(pts.at(-1)[0] * W, pts.at(-1)[1] * H);
+      o.stroke();
+    }
+    o.restore();
+  }
+  L.bbox = drawBbox(L.cv);
+}
+function drawBbox(cv) {
+  const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  let x1 = 1e9, y1 = 1e9, x2 = -1, y2 = -1;
+  for (let y = 0; y < cv.height; y += 2) for (let x = 0; x < cv.width; x += 2)
+    if (d[(y * cv.width + x) * 4 + 3] > 8) { if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y; }
+  return x2 < 0 ? { x: 0, y: 0, w: 40, h: 40 } : { x: x1, y: y1, w: x2 - x1 + 2, h: y2 - y1 + 2 };
+}
+function drawDrawLayer(L, W, H) {
+  ensureDrawCv(L, W, H);
+  const cx = W * lx(L.x), cy = H * lx(L.y);
+  const sx = L.sx || 1, sy = L.sy || 1;
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
+  ctx.scale(sx, sy);
+  ctx.globalAlpha = (L.op ?? 100) / 100;
+  ctx.drawImage(L.cv, -W / 2, -H / 2, W, H);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  const bb = L.bbox;
+  selBox(L, cx + (bb.x + bb.w / 2 - W / 2) * sx - bb.w * sx / 2 - 8,
+            cy + (bb.y + bb.h / 2 - H / 2) * sy - bb.h * sy / 2 - 8,
+            bb.w * sx + 16, bb.h * sy + 16);
+}
 function starPath(r, points) {
   for (let i = 0; i < points * 2; i++) {
     const rr = i % 2 ? r * .45 : r;
@@ -226,6 +295,7 @@ function loadImageFile(file) {
   if (!checkFile(file)) return false;
   const img = new Image();
   img.onload = () => {
+    record();
     state.img = { el: img, src: file.name, zoom: 1, x: .5, y: .5 };
     $('imgZoom').value = 100;
     $('canvasWrap').classList.remove('noimg');
@@ -370,6 +440,7 @@ $('presetRow').addEventListener('click', (e) => {
 // ----- 레이어 관리 -----
 function addLayer(L) {
   if (state.layers.length >= 20) { toast('레이어는 최대 20개까지예요', 'err'); return null; }
+  record();   // 변경 전 상태 보존 (버튼 클릭용)
   const layer = { id: uid(), rot: 0, op: 100, x: .5, y: .5, ...L };
   state.layers.push(layer);
   selectLayer(layer.id);
@@ -377,7 +448,7 @@ function addLayer(L) {
   return layer;
 }
 function selLayer() { return state.layers.find(l => l.id === state.sel) || null; }
-const LAYER_ICON = { text: '𝐓', img: '🖼', shape: '◆' };
+const LAYER_ICON = { text: '𝐓', img: '🖼', shape: '◆', draw: '🖊' };
 function renderLayerList() {
   const ul = $('layerList');
   ul.innerHTML = state.layers.length ? '' : '<li class="layer-empty">레이어가 없습니다 — 문구·도형·스티커를 추가해 보세요</li>';
@@ -571,17 +642,64 @@ function rasterize(el, max = 400) {
   return off.toDataURL('image/png');
 }
 
+// ----- 자유 그리기 (펜/지우개) -----
+let penLayer = null;    // 현재 그리는 draw 레이어 id
+let stroke = null;
+$('penStart').onclick = () => {
+  const L = addLayer({ type: 'draw', strokes: [], x: .5, y: .5, w: 1 });
+  if (!L) return;
+  penLayer = L.id;
+  $('penDone').hidden = false;
+  $('penStart').hidden = true;
+  board.classList.add('drawing');
+  toast('캔버스를 드래그해 그리세요 — 끝나면 "그리기 완료"');
+};
+$('penDone').onclick = () => {
+  const L = state.layers.find(l => l.id === penLayer);
+  if (L) { ensureDrawCv(L, board.width, board.height); L.bbox = drawBbox(L.cv); }
+  penLayer = null;
+  $('penDone').hidden = true;
+  $('penStart').hidden = false;
+  board.classList.remove('drawing');
+  commitBase(); render();
+};
+function strokeDraw(L, o, from, to) {
+  const [W, H] = [L.cv.width, L.cv.height];
+  o.save();
+  o.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
+  o.strokeStyle = stroke.color; o.lineWidth = stroke.size;
+  o.lineCap = 'round'; o.lineJoin = 'round';
+  o.beginPath(); o.moveTo(from[0] * W, from[1] * H); o.lineTo(to[0] * W, to[1] * H); o.stroke();
+  o.restore();
+}
+
 // ----- 캔버스 드래그 -----
 let drag = null;
 board.addEventListener('pointerdown', (e) => {
   const r = board.getBoundingClientRect();
   const px = (e.clientX - r.left) / r.width * board.width;
   const py = (e.clientY - r.top) / r.height * board.height;
+  // 0) 펜 모드 — 그리기 시작
+  if (penLayer) {
+    const L = state.layers.find(l => l.id === penLayer);
+    if (L) {
+      ensureDrawCv(L, board.width, board.height);
+      stroke = { pts: [[px / board.width, py / board.height]], size: +$('penSize').value, color: $('penColor').value, erase: $('penMode').value === 'erase' };
+      markBase();
+      L.strokes.push(stroke);
+      drag = { kind: 'pen', id: L.id };
+      board.setPointerCapture(e.pointerId);
+      board.classList.add('grabbing');
+      render();
+      return;
+    }
+  }
   // 1) 리사이즈 핸들
   const selL = selLayer();
   if (selL) {
     for (const hb of handleBoxes) {
       if (px >= hb.x && px <= hb.x + hb.w && py >= hb.y && py <= hb.y + hb.h) {
+        markBase();
         drag = { kind: 'resize', dir: hb.dir, id: selL.id, ssx: selL.sx || 1, ssy: selL.sy || 1, hx: hb.cx, hy: hb.cy, cx: selL.x * board.width, cy: selL.y * board.height };
         board.setPointerCapture(e.pointerId);
         board.classList.add('grabbing');
@@ -594,6 +712,7 @@ board.addEventListener('pointerdown', (e) => {
     const b = layerBoxes[i];
     if (b.w && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
       selectLayer(b.id);
+      markBase();
       drag = { kind: 'layer', id: b.id };
       board.setPointerCapture(e.pointerId);
       board.classList.add('grabbing');
@@ -601,6 +720,7 @@ board.addEventListener('pointerdown', (e) => {
     }
   }
   if (state.img) {
+    markBase();
     drag = { kind: 'img', sx: state.img.x, sy: state.img.y, px, py };
     board.setPointerCapture(e.pointerId);
     board.classList.add('grabbing');
@@ -611,7 +731,15 @@ board.addEventListener('pointermove', (e) => {
   const r = board.getBoundingClientRect();
   const px = (e.clientX - r.left) / r.width * board.width;
   const py = (e.clientY - r.top) / r.height * board.height;
-  if (drag.kind === 'layer') {
+  if (drag.kind === 'pen') {
+    const L = state.layers.find(l => l.id === drag.id);
+    if (L && stroke) {
+      const p = [px / board.width, py / board.height];
+      strokeDraw(L, L.cv.getContext('2d'), stroke.pts.at(-1), p);
+      stroke.pts.push(p);
+      render();
+    }
+  } else if (drag.kind === 'layer') {
     const L = state.layers.find(l => l.id === drag.id);
     if (L) {
       L.x = lx(px / board.width);
@@ -641,12 +769,21 @@ board.addEventListener('pointermove', (e) => {
     render();
   }
 });
-const endDrag = () => { drag = null; board.classList.remove('grabbing'); };
+const endDrag = () => {
+  if (drag?.kind === 'pen') {
+    const L = state.layers.find(l => l.id === drag.id);
+    if (L) L.bbox = drawBbox(L.cv);
+  }
+  if (drag) commitBase();
+  stroke = null; drag = null; board.classList.remove('grabbing');
+};
 board.addEventListener('pointerup', endDrag);
 board.addEventListener('pointercancel', endDrag);
 
 // ----- 비율·탭·내보내기 -----
 document.querySelectorAll('.ratio-tab').forEach(t => t.addEventListener('click', () => {
+  if (state.ratio === t.dataset.ratio) return;
+  record();
   document.querySelectorAll('.ratio-tab').forEach(x => { x.classList.remove('on'); x.setAttribute('aria-selected', 'false'); });
   t.classList.add('on'); t.setAttribute('aria-selected', 'true');
   state.ratio = t.dataset.ratio;
@@ -671,6 +808,68 @@ function download(mime, ext, quality) {
 }
 $('dlPng').onclick = () => download('image/png', 'png');
 $('dlJpg').onclick = () => download('image/jpeg', 'jpg', .92);
+
+// ----- 이미지 보정 (필터) -----
+function setFilter() {
+  if (!state.img) return;
+  state.img.f = { b: +$('fBri').value, c: +$('fCon').value, s: +$('fSat').value, bl: +$('fBlu').value };
+  render();
+}
+$('fBri').addEventListener('input', () => { $('fbVal').textContent = $('fBri').value; setFilter(); });
+$('fCon').addEventListener('input', () => { $('fcVal').textContent = $('fCon').value; setFilter(); });
+$('fSat').addEventListener('input', () => { $('fsVal').textContent = $('fSat').value; setFilter(); });
+$('fBlu').addEventListener('input', () => { $('fblVal').textContent = $('fBlu').value; setFilter(); });
+
+// ----- 되돌리기 / 다시 실행 -----
+const hist = [], fut = [];
+function snapshot() {
+  return {
+    ratio: state.ratio, bg: state.bg,
+    img: state.img && { ...state.img },
+    sel: state.sel,
+    layers: state.layers.map(L => ({
+      ...L,
+      strokes: L.strokes?.map(s => ({ ...s, pts: s.pts.map(p => [...p]) })),
+    })),
+  };
+}
+function restore(s) {
+  state.ratio = s.ratio; state.bg = s.bg; state.img = s.img;
+  state.layers = s.layers; state.sel = s.sel;
+  for (const L of state.layers) if (L.type === 'draw' && L.cv) replayStrokes(L);
+  document.querySelectorAll('.ratio-tab').forEach(t => {
+    const on = t.dataset.ratio === state.ratio;
+    t.classList.toggle('on', on); t.setAttribute('aria-selected', on);
+  });
+  $('canvasWrap').classList.toggle('noimg', !state.img);
+  $('bgCustom').value = state.bg;
+  selectLayer(state.sel && state.layers.some(l => l.id === state.sel) ? state.sel : state.layers.at(-1)?.id ?? null);
+  render();
+}
+// 기준 스냅샷: 변경 직전에 찍고, 동작이 끝나면 커밋 (undo는 변경 전 상태를 복원)
+let pendBase = null;
+function markBase() { if (!pendBase) pendBase = snapshot(); }
+function commitBase() {
+  if (!pendBase) return;
+  hist.push(pendBase); pendBase = null;
+  if (hist.length > 40) hist.shift();
+  fut.length = 0;
+}
+function record() { markBase(); commitBase(); }   // 한 방에 기록 (버튼성 액션)
+function undo() { commitBase(); if (!hist.length) { toast('더 되돌릴 게 없어요', 'err'); return; } fut.push(snapshot()); restore(hist.pop()); }
+function redo() { if (!fut.length) { toast('다시 실행할 게 없어요', 'err'); return; } hist.push(snapshot()); restore(fut.pop()); }
+$('undoBtn').onclick = undo;
+$('redoBtn').onclick = redo;
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  else if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
+});
+// 패널에서 제스처 시작(pointerdown/focus) 시 기준을 찍고 끝날 때 커밋
+document.querySelector('.panel').addEventListener('pointerdown', markBase, true);
+document.querySelector('.panel').addEventListener('focusin', markBase, true);
+document.querySelector('.panel').addEventListener('pointerup', commitBase, true);
+document.querySelector('.panel').addEventListener('focusout', commitBase, true);
 
 // ----- 테마 -----
 const THEME_KEY = 'zzal-theme';
@@ -705,13 +904,14 @@ function snapshotState(imgDataURL) {
     } : null,
     layers: state.layers.map(L => {
       const c = { ...L };
-      delete c.el;
+      delete c.el; delete c.cv; delete c.cvW; delete c.cvH; delete c.bbox;
       if (L.type === 'img') c.dataURL = L.dataURL || (L.el ? rasterize(L.el) : null);
       return c;
     }),
   };
 }
 function applyState(s) {
+  record();   // 템플릿 적용 전 상태 보존
   state.ratio = s.ratio; state.bg = s.bg;
   state.layers = []; state.img = null;
   const pending = [];
@@ -830,9 +1030,10 @@ renderStickerPanel();
 document.fonts.ready.then(render);
 addStartup();
 function addStartup() {
-  addLayer({ type: 'text', text: '짤·카드 스튜디오', x: .5, y: .16, size: 78, color: '#FFD166',
-    font: "'Black Han Sans'", weight: 400, italic: false, ls: 0, outline: true, fx: 'solid' });
-  const L2 = addLayer({ type: 'text', text: '이미지와 문구를 조합해 나만의 짤 만들기', x: .5, y: .82, size: 40, color: '#FFFFFF',
-    font: "'Jua'", weight: 400, italic: false, ls: 0, outline: true, fx: 'solid' });
+  addLayer({ type: 'text', text: '짤·카드 스튜디오', x: .5, y: .16, size: 78, color: '#221B38',
+    font: "'Black Han Sans'", weight: 400, italic: false, ls: 0, outline: false, fx: 'solid' });
+  addLayer({ type: 'text', text: '이미지와 문구를 조합해 나만의 짤 만들기', x: .5, y: .82, size: 40, color: '#6B6483',
+    font: "'Jua'", weight: 400, italic: false, ls: 0, outline: false, fx: 'solid' });
   selectLayer(state.layers[0].id);
+  record();   // 초기 상태가 히스토리 기준점
 }

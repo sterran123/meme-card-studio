@@ -115,6 +115,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 }
 #board { display: block; width: 100%; height: auto; cursor: grab; touch-action: none; }
 #board.grabbing { cursor: grabbing; }
+#board.drawing { cursor: crosshair; }
 .drop-hint {
   position: absolute; inset: 0; display: none;
   place-items: center; text-align: center;
@@ -123,8 +124,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
   pointer-events: none; transition: opacity .2s;
 }
 .drop-hint b { color: var(--vio); }
-.canvas-wrap.dragover .drop-hint,
-.canvas-wrap.noimg .drop-hint { display: grid; }
+.canvas-wrap.dragover .drop-hint { display: grid; }
 .canvas-wrap.dragover .drop-hint { background: rgba(139,124,255,.25); color: #fff; }
 .stage-hint { margin-top: 14px; font-size: .78rem; color: var(--ink-2); }
 .stage-hint b { color: var(--mint); }
