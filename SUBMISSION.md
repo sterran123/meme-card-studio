@@ -6,7 +6,7 @@
 
 ## 소스 주소
 
-- (커밋 확정 후 기입) https://github.com/sterran123/meme-card-studio/commit/XXXXXXXX
+- https://github.com/sterran123/meme-card-studio/commit/a45d34a0fb49bcdc204f023cc8ebcda8b87213cc
 
 ## 짧은 확인 방법
 
