@@ -1147,7 +1147,7 @@ $('jsonInput').addEventListener('change', (e) => {
 
 // ----- 초기화 -----
 $('canvasWrap').classList.add('noimg');
-applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+applyTheme(localStorage.getItem(THEME_KEY) || 'light');
 setAr();
 renderStickerPanel();
 syncImageControls();
