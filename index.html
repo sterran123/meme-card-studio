@@ -34,7 +34,7 @@
         <canvas id="board" width="1080" height="1080" aria-label="편집 미리보기 캔버스"></canvas>
         <div class="drop-hint" id="dropHint">이미지를 여기에 끌어다 놓거나<br><b>이미지 불러오기</b>를 누르세요</div>
       </div>
-      <p class="stage-hint">요소는 캔버스에서 <b>드래그로 이동</b> · 배경 이미지도 드래그로 위치 조정</p>
+      <p class="stage-hint">요소는 캔버스에서 <b>드래그로 이동</b> · 선택하면 나오는 <b>핸들로 크기 조절</b> (모서리=비율 유지, 변=한 축만) · 배경 이미지도 드래그로 위치 조정</p>
     </section>
 
     <!-- 오른쪽: 컨트롤 패널 -->
@@ -98,6 +98,7 @@
           <div class="mini-actions">
             <button class="btn-ghost" id="layerUp">위로</button>
             <button class="btn-ghost" id="layerDown">아래로</button>
+            <button class="btn-ghost" id="layerReset">크기 초기화</button>
             <button class="btn-ghost" id="layerDel">삭제</button>
           </div>
           <hr class="div">

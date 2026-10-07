@@ -41,7 +41,27 @@ function render() {
     else if (L.type === 'img') drawImgLayer(L, W, H);
     else if (L.type === 'shape') drawShapeLayer(L, W, H);
   }
+  // 선택 레이어 리사이즈 핸들 — 모서리=비율 유지, 변=한 축만
+  handleBoxes = [];
+  const sb = layerBoxes.find(b => b.id === state.sel);
+  if (sb?.w) {
+    const hs = 18;   // 핸들 크기 (캔버스 단위)
+    const pts = [
+      { dir: 'nw', x: sb.x, y: sb.y }, { dir: 'n', x: sb.x + sb.w / 2, y: sb.y }, { dir: 'ne', x: sb.x + sb.w, y: sb.y },
+      { dir: 'w', x: sb.x, y: sb.y + sb.h / 2 }, { dir: 'e', x: sb.x + sb.w, y: sb.y + sb.h / 2 },
+      { dir: 'sw', x: sb.x, y: sb.y + sb.h }, { dir: 's', x: sb.x + sb.w / 2, y: sb.y + sb.h }, { dir: 'se', x: sb.x + sb.w, y: sb.y + sb.h },
+    ];
+    for (const p of pts) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#8B7CFF';
+      ctx.lineWidth = 3;
+      ctx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
+      ctx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
+      handleBoxes.push({ dir: p.dir, x: p.x - hs / 2 - 8, y: p.y - hs / 2 - 8, w: hs + 16, h: hs + 16, cx: p.x, cy: p.y });
+    }
+  }
 }
+let handleBoxes = [];
 
 function selBox(L, x, y, w, h) {
   layerBoxes.push({ id: L.id, x, y, w, h });
@@ -59,6 +79,7 @@ function drawTextLayer(L, W, H) {
   if (!L.text.trim()) { layerBoxes.push({ id: L.id, x: 0, y: 0, w: 0, h: 0 }); return; }
   const size = Math.min(Math.max(L.size | 0, 8), 240);
   const cx = W * lx(L.x), cy = H * lx(L.y);
+  const sx = L.sx || 1, sy = L.sy || 1;
   ctx.save();
   ctx.font = `${L.italic ? 'italic ' : ''}${L.weight || 400} ${size}px ${L.font}, sans-serif`;
   ctx.textAlign = 'center';
@@ -72,6 +93,7 @@ function drawTextLayer(L, W, H) {
   const bh = lines.length * lh;
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
+  ctx.scale(sx, sy);
   ctx.globalAlpha = (L.op ?? 100) / 100;
   const fillOf = (dy) => {
     if (L.fx === 'grad') {
@@ -100,7 +122,7 @@ function drawTextLayer(L, W, H) {
   drawAll(0, 0, fillOf());
   ctx.restore();
   ctx.globalAlpha = 1;
-  selBox(L, cx - maxLine / 2 - 10, cy - bh / 2 - size, maxLine + 20, bh + size * .4);
+  selBox(L, cx - (maxLine * sx) / 2 - 10, cy - (bh * sy) / 2 - size * sy, maxLine * sx + 20, bh * sy + size * sy * .4);
 }
 function wrapText(text, maxW) {
   const out = [];
@@ -118,17 +140,21 @@ function wrapText(text, maxW) {
 // --- 이미지 레이어 ---
 function drawImgLayer(L, W, H) {
   if (!L.el?.complete || !L.el?.naturalWidth) { layerBoxes.push({ id: L.id, x: 0, y: 0, w: 0, h: 0 }); return; }
-  const w = W * Math.min(Math.max(L.w || .3, .02), 2);
-  const h = w * L.el.naturalHeight / L.el.naturalWidth;
+  const w = W * Math.min(Math.max(L.w || .3, .02), 2) * (L.sx || 1);
+  const h = w * L.el.naturalHeight / L.el.naturalWidth * (L.sy || 1) / (L.sx || 1);
+  const hh = w * L.el.naturalHeight / L.el.naturalWidth / (L.sx || 1) * (L.sy || 1);
   const cx = W * lx(L.x), cy = H * lx(L.y);
   ctx.save();
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
+  ctx.scale(L.sx || 1, L.sy || 1);
   ctx.globalAlpha = (L.op ?? 100) / 100;
-  ctx.drawImage(L.el, -w / 2, -h / 2, w, h);
+  const dw = W * Math.min(Math.max(L.w || .3, .02), 2);
+  const dh = dw * L.el.naturalHeight / L.el.naturalWidth;
+  ctx.drawImage(L.el, -dw / 2, -dh / 2, dw, dh);
   ctx.restore();
   ctx.globalAlpha = 1;
-  selBox(L, cx - w / 2 - 6, cy - h / 2 - 6, w + 12, h + 12);
+  selBox(L, cx - dw * (L.sx || 1) / 2 - 6, cy - dh * (L.sy || 1) / 2 - 6, dw * (L.sx || 1) + 12, dh * (L.sy || 1) + 12);
 }
 
 // --- 도형 레이어 ---
@@ -139,6 +165,7 @@ function drawShapeLayer(L, W, H) {
   ctx.save();
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
+  ctx.scale(L.sx || 1, L.sy || 1);
   ctx.globalAlpha = (L.op ?? 100) / 100;
   let fill = L.color;
   if (L.fx === 'grad') {
@@ -152,7 +179,7 @@ function drawShapeLayer(L, W, H) {
   ctx.fill();
   ctx.restore();
   ctx.globalAlpha = 1;
-  selBox(L, cx - w / 2 - 6, cy - h / 2 - 6, w + 12, h + 12);
+  selBox(L, cx - w * (L.sx || 1) / 2 - 6, cy - h * (L.sy || 1) / 2 - 6, w * (L.sx || 1) + 12, h * (L.sy || 1) + 12);
 }
 function shapePath(shape, w, h) {
   const r = w / 2;
@@ -431,6 +458,7 @@ $('layRot').addEventListener('input', () => onEdit(L => { L.rot = +$('layRot').v
 $('layOp').addEventListener('input', () => onEdit(L => { L.op = +$('layOp').value; $('opVal').textContent = $('layOp').value; }));
 $('layerUp').onclick = () => moveLayer(1);
 $('layerDown').onclick = () => moveLayer(-1);
+$('layerReset').onclick = () => onEdit(L => { L.sx = 1; L.sy = 1; L.rot = 0; $('layRot').value = 0; $('rotVal').textContent = 0; });
 $('layerDel').onclick = () => {
   const L = selLayer(); if (!L) return;
   state.layers = state.layers.filter(x => x.id !== L.id);
@@ -549,6 +577,19 @@ board.addEventListener('pointerdown', (e) => {
   const r = board.getBoundingClientRect();
   const px = (e.clientX - r.left) / r.width * board.width;
   const py = (e.clientY - r.top) / r.height * board.height;
+  // 1) 리사이즈 핸들
+  const selL = selLayer();
+  if (selL) {
+    for (const hb of handleBoxes) {
+      if (px >= hb.x && px <= hb.x + hb.w && py >= hb.y && py <= hb.y + hb.h) {
+        drag = { kind: 'resize', dir: hb.dir, id: selL.id, ssx: selL.sx || 1, ssy: selL.sy || 1, hx: hb.cx, hy: hb.cy, cx: selL.x * board.width, cy: selL.y * board.height };
+        board.setPointerCapture(e.pointerId);
+        board.classList.add('grabbing');
+        return;
+      }
+    }
+  }
+  // 2) 레이어 이동 (위쪽부터)
   for (let i = layerBoxes.length - 1; i >= 0; i--) {
     const b = layerBoxes[i];
     if (b.w && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
@@ -577,6 +618,21 @@ board.addEventListener('pointermove', (e) => {
       L.y = lx(py / board.height);
       $('txtX').value = Math.round(L.x * 100); $('xVal').textContent = Math.round(L.x * 100);
       $('txtY').value = Math.round(L.y * 100); $('yVal').textContent = Math.round(L.y * 100);
+      render();
+    }
+  } else if (drag.kind === 'resize') {
+    const L = state.layers.find(l => l.id === drag.id);
+    if (L) {
+      const cx = drag.cx, cy = drag.cy;
+      const fx = Math.abs(drag.hx - cx) > 4 ? (px - cx) / (drag.hx - cx) : 1;
+      const fy = Math.abs(drag.hy - cy) > 4 ? (py - cy) / (drag.hy - cy) : 1;
+      const clamp = (v) => Math.max(.05, Math.min(6, v));
+      if (drag.dir.length === 2) {          // 모서리 — 비율 유지 (가로 기준, 세로 따라감)
+        const f = fx;
+        L.sx = clamp(drag.ssx * f);
+        L.sy = clamp(drag.ssy * f);
+      } else if (drag.dir === 'e' || drag.dir === 'w') L.sx = clamp(drag.ssx * fx);   // 가로만
+      else L.sy = clamp(drag.ssy * fy);                                              // 세로만
       render();
     }
   } else if (state.img) {
