@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>짤·카드 스튜디오 — 이미지+문구 제작기</title>
+  <meta name="description" content="이미지와 문구를 조합해 밈·카드·SNS 게시물을 만드는 브라우저 편집기. 1:1·4:5·9:16 비율 내려받기.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&family=Press+Start+2P&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <p class="logo">짤·카드<span class="logo-dot"> 스튜디오</span></p>
+    <div class="top-actions">
+      <button class="btn-ghost" id="jsonExport">템플릿 내보내기</button>
+      <button class="btn-ghost" id="jsonImportBtn">JSON 가져오기</button>
+      <button class="btn-primary" id="dlPng">PNG 저장</button>
+      <button class="btn-primary alt" id="dlJpg">JPG 저장</button>
+    </div>
+  </header>
+
+  <main class="studio">
+    <!-- 왼쪽: 캔버스 스테이지 -->
+    <section class="stage">
+      <div class="ratio-tabs" role="tablist" aria-label="화면 비율">
+        <button class="ratio-tab on" data-ratio="1:1" role="tab" aria-selected="true">1:1<span>정사각</span></button>
+        <button class="ratio-tab" data-ratio="4:5" role="tab" aria-selected="false">4:5<span>피드</span></button>
+        <button class="ratio-tab" data-ratio="9:16" role="tab" aria-selected="false">9:16<span>스토리</span></button>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="board" width="1080" height="1080" aria-label="편집 미리보기 캔버스"></canvas>
+        <div class="drop-hint" id="dropHint">이미지를 여기에 끌어다 놓거나<br><b>이미지 불러오기</b>를 누르세요</div>
+      </div>
+      <p class="stage-hint">문구는 캔버스에서 <b>드래그로 이동</b> · 배경 이미지도 드래그로 위치 조정</p>
+    </section>
+
+    <!-- 오른쪽: 컨트롤 패널 -->
+    <aside class="panel">
+      <nav class="panel-tabs" aria-label="편집 메뉴">
+        <button class="ptab on" data-panel="image">이미지</button>
+        <button class="ptab" data-panel="text">문구</button>
+        <button class="ptab" data-panel="template">템플릿</button>
+      </nav>
+
+      <!-- 이미지 탭 -->
+      <div class="pane on" id="pane-image">
+        <button class="btn-primary wide" id="imgBtn">이미지 불러오기</button>
+        <input type="file" id="imgInput" accept="image/png,image/jpeg" hidden>
+        <input type="file" id="jsonInput" accept="application/json,.json" hidden>
+        <p class="field-label">확대 / 축소</p>
+        <input type="range" id="imgZoom" min="50" max="300" value="100" aria-label="이미지 확대">
+        <p class="field-label">배경색 (이미지 없거나 빈틈에 표시)</p>
+        <div class="color-row" id="bgColors">
+          <button class="swatch on" style="--c:#17141F" data-c="#17141F" aria-label="검정 보라"></button>
+          <button class="swatch" style="--c:#0E1B2E" data-c="#0E1B2E" aria-label="네이비"></button>
+          <button class="swatch" style="--c:#3B1F4E" data-c="#3B1F4E" aria-label="자두"></button>
+          <button class="swatch" style="--c:#123B2F" data-c="#123B2F" aria-label="청록"></button>
+          <button class="swatch" style="--c:#F4EFFA" data-c="#F4EFFA" aria-label="밝은"></button>
+          <input type="color" id="bgCustom" value="#17141F" aria-label="직접 배경색">
+        </div>
+        <p class="field-label">샘플 배경 (사용 권한: 자체 제작)</p>
+        <div class="preset-row" id="presetRow">
+          <button class="preset" data-preset="night">밤하늘</button>
+          <button class="preset" data-preset="sunset">노을</button>
+          <button class="preset" data-preset="mint">민트</button>
+        </div>
+      </div>
+
+      <!-- 문구 탭 -->
+      <div class="pane" id="pane-text">
+        <button class="btn-ghost wide" id="addLayer">+ 문구 추가</button>
+        <ul class="layer-list" id="layerList"></ul>
+        <div class="layer-editor" id="layerEditor" hidden>
+          <textarea id="txtContent" rows="3" maxlength="300" placeholder="문구 입력…"></textarea>
+          <p class="field-label">폰트</p>
+          <select id="txtFont" aria-label="폰트">
+            <option value="'Black Han Sans'">블랙한산스 (밈체)</option>
+            <option value="'Jua'">주아 (둥글)</option>
+            <option value="'Pretendard Variable'">프리텐다드 (깔끔)</option>
+          </select>
+          <p class="field-label">크기 <output id="sizeVal">64</output></p>
+          <input type="range" id="txtSize" min="16" max="200" value="64" aria-label="문구 크기">
+          <p class="field-label">색</p>
+          <div class="color-row" id="txtColors">
+            <button class="swatch on" style="--c:#FFFFFF" data-c="#FFFFFF"></button>
+            <button class="swatch" style="--c:#FFD166" data-c="#FFD166"></button>
+            <button class="swatch" style="--c:#5CE0B3" data-c="#5CE0B3"></button>
+            <button class="swatch" style="--c:#FF6B5E" data-c="#FF6B5E"></button>
+            <button class="swatch" style="--c:#17141F" data-c="#17141F"></button>
+            <input type="color" id="txtCustom" value="#FFFFFF">
+          </div>
+          <div class="xy-row">
+            <div><p class="field-label">가로 위치 <output id="xVal">50</output>%</p>
+              <input type="range" id="txtX" min="0" max="100" value="50"></div>
+            <div><p class="field-label">세로 위치 <output id="yVal">50</output>%</p>
+              <input type="range" id="txtY" min="0" max="100" value="50"></div>
+          </div>
+          <label class="check-row"><input type="checkbox" id="txtOutline" checked> 외곽선 (어떤 배경에서도 읽힘)</label>
+        </div>
+      </div>
+
+      <!-- 템플릿 탭 -->
+      <div class="pane" id="pane-template">
+        <button class="btn-ghost wide" id="saveTpl">현재 상태를 템플릿으로 저장</button>
+        <ul class="tpl-list" id="tplList"><li class="tpl-empty">저장된 템플릿이 없습니다</li></ul>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

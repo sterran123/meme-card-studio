@@ -1,0 +1,1 @@
+﻿{ "app": "meme-card-studio", "v": 1, "templates": [ { "id": "tpl-json1", "name": "JSON 템플릿", "created": 1, "state": { "ratio": "4:5", "bg": "#123B2F", "img": null, "layers": [ { "id": "L1", "text": "JSON 복원 문구", "x": 0.5, "y": 0.3, "size": 70, "color": "#5CE0B3", "font": "'Black Han Sans'", "outline": true } ] } } ] }
