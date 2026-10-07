@@ -225,6 +225,24 @@ $('ovBtn').onclick = () => $('ovInput').click();
 $('imgInput').addEventListener('change', (e) => { loadImageFile(e.target.files[0]); e.target.value = ''; });
 $('ovInput').addEventListener('change', (e) => { loadOverlayFile(e.target.files[0]); e.target.value = ''; });
 
+// 클립보드 붙여넣기 — 스꾸(seukku.cc) 같은 스티커 사이트에서 "복사"한 이미지가 바로 레이어로 추가됨
+document.addEventListener('paste', (e) => {
+  for (const item of e.clipboardData?.items || []) {
+    if (!item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    e.preventDefault();
+    if (!checkFile(file)) return;
+    const img = new Image();
+    img.onload = () => {
+      addLayer({ type: 'img', el: img, src: '붙여넣은 이미지', dataURL: img.src, x: .5, y: .5, w: .4 });
+      toast('붙여넣은 이미지를 레이어로 추가했어요');
+      document.querySelector('[data-panel="layer"]').click();
+    };
+    img.src = URL.createObjectURL(file);
+    return;
+  }
+});
+
 const wrap = $('canvasWrap');
 for (const ev of ['dragenter', 'dragover']) wrap.addEventListener(ev, (e) => { e.preventDefault(); wrap.classList.add('dragover'); });
 for (const ev of ['dragleave', 'drop']) wrap.addEventListener(ev, (e) => { e.preventDefault(); wrap.classList.remove('dragover'); });
