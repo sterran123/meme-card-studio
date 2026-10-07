@@ -1,0 +1,176 @@
+<!doctype html><meta charset="utf-8"><title>스티커 생성기</title>
+<body><p>생성 중… 콘솔 확인</p><script>
+/* 실사풍 스티커 PNG 생성기 — 방사형/선형 그라데이션 합성으로 사진 느낌 구현
+   window.gen() 호출 → { name: dataURL } 반환 */
+const S = 512;
+function mk(fn, w = S, h = S) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const o = c.getContext('2d');
+  fn(o, w, h);
+  return c.toDataURL('image/png');
+}
+const blob = (o, x, y, r, inner, outer, ry = r) => {
+  const g = o.createRadialGradient(x, y, r * .12, x, y, r);
+  g.addColorStop(0, inner); g.addColorStop(.72, outer); g.addColorStop(1, 'rgba(255,255,255,0)');
+  o.fillStyle = g;
+  o.beginPath(); o.ellipse(x, y, r, ry, 0, 0, 7); o.fill();
+};
+
+const G = {
+  'real-cloud': (o) => {
+    const puffs = [[150,310,88],[225,265,108],[305,235,118],[390,265,95],[265,322,135],[200,322,95],[340,312,100]];
+    // 단색 실루엣 코어
+    puffs.forEach(([x,y,r]) => {
+      const g = o.createRadialGradient(x, y - r*.25, r*.1, x, y, r);
+      g.addColorStop(0, '#FFFFFF'); g.addColorStop(.72, '#EDF4FD'); g.addColorStop(1, '#BFD3EE');
+      o.fillStyle = g;
+      o.beginPath(); o.ellipse(x, y, r, r*.8, 0, 0, 7); o.fill();
+    });
+    // 하단 음영
+    [[190,345,75],[300,352,95],[395,332,70]]
+      .forEach(([x,y,r]) => blob(o, x, y, r, 'rgba(150,175,220,.5)', 'rgba(150,175,220,0)'));
+    // 상단 하이라이트
+    puffs.forEach(([x,y,r]) => blob(o, x - r*.15, y - r*.35, r*.5, 'rgba(255,255,255,.95)', 'rgba(255,255,255,0)'));
+  },
+  'real-cloud2': (o) => {
+    const puffs = [[150,290,65],[215,255,85],[290,240,95],[365,270,75],[255,315,105],[200,310,70]];
+    puffs.forEach(([x,y,r]) => {
+      const g = o.createRadialGradient(x, y - r*.25, r*.1, x, y, r);
+      g.addColorStop(0, '#FFFFFF'); g.addColorStop(.72, '#EDF4FD'); g.addColorStop(1, '#C4D8F0');
+      o.fillStyle = g;
+      o.beginPath(); o.ellipse(x, y, r, r*.8, 0, 0, 7); o.fill();
+    });
+    blob(o, 260, 350, 95, 'rgba(155,180,225,.5)', 'rgba(155,180,225,0)');
+    puffs.forEach(([x,y,r]) => blob(o, x - r*.15, y - r*.35, r*.48, 'rgba(255,255,255,.9)', 'rgba(255,255,255,0)'));
+  },
+  'real-sun': (o) => {
+    const cx = 256, cy = 256;
+    blob(o, cx, cy, 250, 'rgba(255,220,120,.85)', 'rgba(255,190,60,0)');
+    blob(o, cx, cy, 160, 'rgba(255,235,170,1)', 'rgba(255,180,60,.9)');
+    const g = o.createRadialGradient(cx-30, cy-30, 10, cx, cy, 110);
+    g.addColorStop(0,'#FFF8DC'); g.addColorStop(.6,'#FFD166'); g.addColorStop(1,'#FF9A3C');
+    o.fillStyle = g; o.beginPath(); o.arc(cx, cy, 110, 0, 7); o.fill();
+    blob(o, cx-35, cy-40, 40, 'rgba(255,255,255,.75)', 'rgba(255,255,255,0)');
+  },
+  'real-moon': (o) => {
+    const cx=256, cy=256;
+    blob(o, cx, cy, 240, 'rgba(200,220,255,.4)', 'rgba(200,220,255,0)');
+    const g = o.createRadialGradient(cx-60, cy-60, 20, cx, cy, 160);
+    g.addColorStop(0,'#F6F0DD'); g.addColorStop(.7,'#D9CFAE'); g.addColorStop(1,'#A9A084');
+    o.fillStyle = g; o.beginPath(); o.arc(cx, cy, 160, 0, 7); o.fill();
+    [[210,200,34],[300,280,26],[270,160,20],[200,310,22]].forEach(([x,y,r]) => {
+      const c = o.createRadialGradient(x, y, 2, x, y, r);
+      c.addColorStop(0,'rgba(150,140,110,.55)'); c.addColorStop(1,'rgba(150,140,110,0)');
+      o.fillStyle = c; o.beginPath(); o.arc(x, y, r, 0, 7); o.fill();
+    });
+    blob(o, cx-70, cy-70, 60, 'rgba(255,255,255,.5)', 'rgba(255,255,255,0)');
+  },
+  'real-mountain': (o) => {
+    // 원근 산 2겹 + 설산
+    const g1 = o.createLinearGradient(0, 160, 0, 460);
+    g1.addColorStop(0,'#8FA8C8'); g1.addColorStop(1,'#5A7598');
+    o.fillStyle = g1;
+    o.beginPath(); o.moveTo(40, 460); o.lineTo(210, 190); o.lineTo(380, 460); o.closePath(); o.fill();
+    const g2 = o.createLinearGradient(0, 140, 0, 480);
+    g2.addColorStop(0,'#5E7BA0'); g2.addColorStop(1,'#33455F');
+    o.fillStyle = g2;
+    o.beginPath(); o.moveTo(160, 480); o.lineTo(330, 150); o.lineTo(500, 480); o.closePath(); o.fill();
+    // 설산꼭
+    o.fillStyle = 'rgba(240,246,255,.95)';
+    o.beginPath(); o.moveTo(330,150); o.lineTo(295,215); o.lineTo(315,240); o.lineTo(340,215); o.lineTo(365,240); o.lineTo(382,215); o.closePath(); o.fill();
+    blob(o, 330, 160, 90, 'rgba(200,220,255,.4)', 'rgba(200,220,255,0)');
+  },
+  'real-wave': (o) => {
+    const g = o.createLinearGradient(0, 180, 0, 480);
+    g.addColorStop(0,'#7CC4F0'); g.addColorStop(1,'#1E6FB4');
+    o.fillStyle = g;
+    o.beginPath();
+    o.moveTo(40, 460);
+    o.bezierCurveTo(60, 240, 220, 160, 330, 220);
+    o.bezierCurveTo(430, 270, 470, 360, 470, 460);
+    o.closePath(); o.fill();
+    // 파도 거품
+    [[310,215,60],[380,255,45],[255,195,40],[420,300,38]]
+      .forEach(([x,y,r]) => blob(o, x, y, r, 'rgba(255,255,255,.95)', 'rgba(255,255,255,0)'));
+    [[150,300,50],[90,380,60],[200,250,36]]
+      .forEach(([x,y,r]) => blob(o, x, y, r, 'rgba(160,215,245,.6)', 'rgba(160,215,245,0)'));
+  },
+  'real-tree': (o) => {
+    const trunk = o.createLinearGradient(230, 300, 285, 470);
+    trunk.addColorStop(0,'#8B6B4F'); trunk.addColorStop(1,'#5A4128');
+    o.fillStyle = trunk;
+    o.beginPath(); o.moveTo(238, 470); o.quadraticCurveTo(245, 360, 252, 300);
+    o.lineTo(272, 300); o.quadraticCurveTo(278, 360, 282, 470); o.closePath(); o.fill();
+    [[200,220,75],[256,190,90],[320,220,80],[230,280,70],[290,280,65]]
+      .forEach(([x,y,r]) => blob(o, x, y, r, 'rgba(120,190,110,.95)', 'rgba(70,140,80,.7)'));
+    [[220,180,40],[290,170,35]]
+      .forEach(([x,y,r]) => blob(o, x, y, r, 'rgba(190,230,160,.7)', 'rgba(190,230,160,0)'));
+  },
+  'real-flower': (o) => {
+    const cx=256, cy=250;
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      blob(o, cx + Math.cos(a)*85, cy + Math.sin(a)*85, 78, 'rgba(255,170,200,.95)', 'rgba(235,110,160,.55)', 60);
+    }
+    const g = o.createRadialGradient(cx-10, cy-10, 4, cx, cy, 55);
+    g.addColorStop(0,'#FFE9A8'); g.addColorStop(1,'#F5B840');
+    o.fillStyle = g; o.beginPath(); o.arc(cx, cy, 52, 0, 7); o.fill();
+    for (let i=0;i<8;i++){const a=i*Math.PI/4; blob(o, cx+Math.cos(a)*30, cy+Math.sin(a)*30, 8, 'rgba(180,120,40,.6)','rgba(180,120,40,0)');}
+  },
+  'real-star': (o) => {
+    const cx=256, cy=256;
+    blob(o, cx, cy, 230, 'rgba(255,215,120,.7)', 'rgba(255,215,120,0)');
+    const star = (r1, r2, n) => { o.beginPath(); for (let i=0;i<n*2;i++){ const r=i%2?r2:r1, a=i*Math.PI/n-Math.PI/2; o[i?'lineTo':'moveTo'](cx+Math.cos(a)*r, cy+Math.sin(a)*r); } o.closePath(); };
+    const g = o.createLinearGradient(cx, cy-160, cx, cy+160);
+    g.addColorStop(0,'#FFF3C4'); g.addColorStop(1,'#F0A830');
+    o.fillStyle = g; star(160, 70, 5); o.fill();
+    blob(o, cx-45, cy-55, 55, 'rgba(255,255,255,.8)', 'rgba(255,255,255,0)');
+  },
+  'real-rainbow': (o) => {
+    const cols = ['#FF6B5E','#FFA940','#FFE36E','#5CE0B3','#5CA8FF','#9B7CFF'];
+    cols.forEach((c, i) => {
+      o.strokeStyle = c; o.lineWidth = 34;
+      o.beginPath(); o.arc(256, 420, 190 - i * 36, Math.PI, Math.PI * 2); o.stroke();
+    });
+    blob(o, 90, 420, 90, 'rgba(255,255,255,.85)', 'rgba(230,240,252,0)');
+    blob(o, 425, 420, 90, 'rgba(255,255,255,.85)', 'rgba(230,240,252,0)');
+  },
+  'real-balloon': (o) => {
+    const cx=256, cy=210;
+    const g = o.createRadialGradient(cx-55, cy-60, 20, cx, cy, 175);
+    g.addColorStop(0,'#FFAFB8'); g.addColorStop(.5,'#F06070'); g.addColorStop(1,'#C23548');
+    o.fillStyle = g;
+    o.beginPath(); o.ellipse(cx, cy, 150, 175, 0, 0, 7); o.fill();
+    blob(o, cx-55, cy-75, 55, 'rgba(255,255,255,.55)', 'rgba(255,255,255,0)');
+    o.fillStyle = '#C23548';
+    o.beginPath(); o.moveTo(cx-12, cy+172); o.lineTo(cx+12, cy+172); o.lineTo(cx, cy+200); o.closePath(); o.fill();
+    o.strokeStyle = 'rgba(90,60,70,.8)'; o.lineWidth = 4;
+    o.beginPath(); o.moveTo(cx, cy+200); o.bezierCurveTo(cx+25, cy+280, cx-25, cy+340, cx+10, cy+440); o.stroke();
+  },
+  'real-gift': (o) => {
+    const g = o.createLinearGradient(0,180,0,460);
+    g.addColorStop(0,'#8B7CFF'); g.addColorStop(1,'#5B4BC0');
+    o.fillStyle = g;
+    o.beginPath(); o.roundRect(106, 190, 300, 270, 18); o.fill();
+    const gl = o.createLinearGradient(0,150,0,220);
+    gl.addColorStop(0,'#A99CFF'); gl.addColorStop(1,'#7B68E8');
+    o.fillStyle = gl;
+    o.beginPath(); o.roundRect(86, 150, 340, 70, 14); o.fill();
+    o.fillStyle = '#FFD166';
+    o.fillRect(238, 150, 36, 310);
+    // 리본
+    [['left'],['right']].forEach(([d], i) => {
+      const s = i ? 1 : -1;
+      o.beginPath();
+      o.ellipse(256 + s*55, 125, 55, 32, s*.5, 0, 7);
+      o.fillStyle = '#FFD166'; o.fill();
+      o.strokeStyle = '#E0AA30'; o.lineWidth = 5; o.stroke();
+    });
+    blob(o, 150, 220, 60, 'rgba(255,255,255,.3)', 'rgba(255,255,255,0)');
+  },
+};
+window.gen = () => Object.fromEntries(Object.entries(G).map(([k, fn]) => [k, mk(fn)]));
+gen();
+document.querySelector('p').textContent = '완료: ' + Object.keys(G).join(', ');
+</script>

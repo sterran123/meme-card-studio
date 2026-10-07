@@ -463,10 +463,11 @@ $('shapeGrid').addEventListener('click', (e) => {
 
 // ----- 스티커 라이브러리 -----
 const STICKERS = {
-  '하늘': ['cloud', 'sun', 'moon', 'star'],
-  '반짝임': ['sparkle', 'lightning', 'star', 'meteor'],
-  '자연': ['wave', 'tree', 'cloud'],
-  '사물': ['house', 'bubble', 'heart', 'rocket', 'ufo'],
+  '실사': ['real-cloud.png', 'real-cloud2.png', 'real-sun.png', 'real-moon.png', 'real-mountain.png', 'real-wave.png', 'real-tree.png', 'real-flower.png', 'real-star.png', 'real-rainbow.png', 'real-balloon.png', 'real-gift.png'],
+  '하늘': ['cloud.svg', 'sun.svg', 'moon.svg', 'star.svg'],
+  '반짝임': ['sparkle.svg', 'lightning.svg', 'star.svg', 'meteor.svg'],
+  '자연': ['wave.svg', 'tree.svg', 'cloud.svg'],
+  '사물': ['house.svg', 'bubble.svg', 'heart.svg', 'rocket.svg', 'ufo.svg'],
 };
 const stickerEls = {};   // src 캐시
 const stickerCache = {};
@@ -476,7 +477,7 @@ function stickerEl(name) {
       const img = new Image();
       img.onload = () => res(img);
       img.onerror = () => res(null);
-      img.src = `assets/stickers/${name}.svg`;
+      img.src = `assets/stickers/${name}`;
     });
   }
   return stickerCache[name];
@@ -502,12 +503,12 @@ async function renderStickerGrid(cat) {
   g.innerHTML = '';
   for (const name of STICKERS[cat]) {
     const b = document.createElement('button');
-    b.innerHTML = `<img src="assets/stickers/${name}.svg" alt="${name}">`;
+    b.innerHTML = `<img src="assets/stickers/${name}" alt="${name}">`;
     b.onclick = async () => {
       const el = await stickerEl(name);
       if (!el) { toast('스티커를 불러오지 못했어요', 'err'); return; }
       // 템플릿 저장용 dataURL도 미래에 대비해 rasterize
-      addLayer({ type: 'img', el, src: `스티커:${name}`, sticker: name, x: .5, y: .5, w: .3 });
+      addLayer({ type: 'img', el, src: `스티커:${name.replace(/\.\w+$/, '')}`, sticker: name, x: .5, y: .5, w: .3 });
       document.querySelector('[data-panel="layer"]').click();
       toast(`${name} 스티커 추가`);
     };
