@@ -92,8 +92,20 @@ function drawTextLayer(L, W, H) {
   const maxW = W - 80;
   const lines = wrapText(L.text, maxW);
   const lh = size * 1.35;
-  let maxLine = 0;
-  for (const line of lines) maxLine = Math.max(maxLine, ctx.measureText(line).width);
+  // 실제 잉크 경계로 박스 계산 (기울임·자간·글리프 넘침까지 정확히)
+  const mets = lines.map(ln => ctx.measureText(ln));
+  let inkL = 0, inkR = 0, asc = size * .8, desc = size * .3, maxLine = 0;
+  for (const m of mets) {
+    const l = m.actualBoundingBoxLeft ?? m.width / 2;
+    const r = m.actualBoundingBoxRight ?? m.width / 2;
+    const a = m.actualBoundingBoxAscent ?? size * .8;
+    const d = m.actualBoundingBoxDescent ?? size * .25;
+    if (l > inkL) inkL = l;
+    if (r > inkR) inkR = r;
+    if (a > asc) asc = a;
+    if (d > desc) desc = d;
+    if (m.width > maxLine) maxLine = m.width;
+  }
   const bh = lines.length * lh;
   ctx.translate(cx, cy);
   if (L.rot) ctx.rotate(L.rot * Math.PI / 180);
@@ -126,10 +138,11 @@ function drawTextLayer(L, W, H) {
   drawAll(0, 0, fillOf());
   ctx.restore();
   ctx.globalAlpha = 1;
-  // 실제 글리프 범위에 맞춘 박스: 첫 줄 위(ascender)~마지막 줄 아래(descender), 가운데 정렬
-  const top = cy - ((lines.length - 1) / 2) * lh * sy - size * sy * .82;
-  const boxH = (lines.length - 1) * lh * sy + size * sy * 1.12;
-  selBox(L, cx - (maxLine * sx) / 2 - 8, top - 8, maxLine * sx + 16, boxH + 16);
+  // 실제 글리프 범위에 맞춘 박스: 첫 줄 위(ascender)~마지막 줄 아래(descender)
+  const half = (lines.length - 1) / 2;
+  const top = cy - half * lh * sy - asc * sy;
+  const boxH = half * 2 * lh * sy + asc * sy + desc * sy;
+  selBox(L, cx - inkL * sx - 8, top - 8, (inkL + inkR) * sx + 16, boxH + 16);
 }
 function wrapText(text, maxW) {
   const out = [];
@@ -704,8 +717,10 @@ board.addEventListener('pointerdown', (e) => {
       if (px >= hb.x && px <= hb.x + hb.w && py >= hb.y && py <= hb.y + hb.h) {
         markBase();
         const sb = layerBoxes.find(x => x.id === selL.id);
+        // 레이어 중심↔박스 중심 오프셋 — 비율 바뀌어도 콘텐츠 위치가 튀지 않게
         drag = { kind: 'resize', dir: hb.dir, id: selL.id, ssx: selL.sx || 1, ssy: selL.sy || 1,
-                 box: { x: sb.x, y: sb.y, w: sb.w, h: sb.h } };
+                 box: { x: sb.x, y: sb.y, w: sb.w, h: sb.h },
+                 off: { x: selL.x * board.width - (sb.x + sb.w / 2), y: selL.y * board.height - (sb.y + sb.h / 2) } };
         board.setPointerCapture(e.pointerId);
         board.classList.add('grabbing');
         return;
@@ -724,6 +739,8 @@ board.addEventListener('pointerdown', (e) => {
       return;
     }
   }
+  // 3) 빈 공간 클릭 — 선택 해제 (박스·핸들 숨김)
+  if (state.sel !== null) selectLayer(null);
   if (state.img) {
     markBase();
     drag = { kind: 'img', sx: state.img.x, sy: state.img.y, px, py };
@@ -769,14 +786,16 @@ board.addEventListener('pointermove', (e) => {
       }
       const nsx = clamp(drag.ssx * fx), nsy = clamp(drag.ssy * fy);
       const nw = b.w * nsx / drag.ssx, nh = b.h * nsy / drag.ssy;
-      const nx = drag.dir.includes('e') ? b.x + nw / 2
+      const ncx = drag.dir.includes('e') ? b.x + nw / 2
                : drag.dir.includes('w') ? b.x + b.w - nw / 2
                : b.x + b.w / 2;
-      const ny = drag.dir.includes('s') ? b.y + nh / 2
+      const ncy = drag.dir.includes('s') ? b.y + nh / 2
                : drag.dir.includes('n') ? b.y + b.h - nh / 2
                : b.y + b.h / 2;
       L.sx = nsx; L.sy = nsy;
-      L.x = lx(nx / board.width); L.y = lx(ny / board.height);
+      // 박스 중심에서 레이어 중심으로 — 오프셋도 스케일에 따라 같이 커지므로 위치가 안 튐
+      L.x = lx((ncx - drag.off.x * nsx / drag.ssx) / board.width);
+      L.y = lx((ncy - drag.off.y * nsy / drag.ssy) / board.height);
       render();
     }
   } else if (state.img) {
@@ -803,8 +822,13 @@ document.querySelectorAll('.ratio-tab').forEach(t => t.addEventListener('click',
   document.querySelectorAll('.ratio-tab').forEach(x => { x.classList.remove('on'); x.setAttribute('aria-selected', 'false'); });
   t.classList.add('on'); t.setAttribute('aria-selected', 'true');
   state.ratio = t.dataset.ratio;
+  setAr();
   render();
 }));
+function setAr() {   // 캔버스 표시 비율(가로/세로) — 세로형도 스크롤 없이 보이게 CSS에 전달
+  const [w, h] = RATIOS[state.ratio];
+  document.documentElement.style.setProperty('--ar', (w / h).toFixed(4));
+}
 document.querySelectorAll('.ptab').forEach(t => t.addEventListener('click', () => {
   document.querySelectorAll('.ptab').forEach(x => x.classList.remove('on'));
   document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
@@ -857,6 +881,7 @@ function restore(s) {
     const on = t.dataset.ratio === state.ratio;
     t.classList.toggle('on', on); t.setAttribute('aria-selected', on);
   });
+  setAr();
   $('canvasWrap').classList.toggle('noimg', !state.img);
   $('bgCustom').value = state.bg;
   selectLayer(state.sel && state.layers.some(l => l.id === state.sel) ? state.sel : state.layers.at(-1)?.id ?? null);
@@ -955,6 +980,7 @@ function applyState(s) {
     const on = t.dataset.ratio === state.ratio;
     t.classList.toggle('on', on); t.setAttribute('aria-selected', on);
   });
+  setAr();
   $('bgCustom').value = state.bg;
   Promise.all(pending).then(() => {
     state.sel = state.layers.at(-1)?.id ?? null;
@@ -1042,6 +1068,7 @@ $('jsonInput').addEventListener('change', (e) => {
 // ----- 초기화 -----
 $('canvasWrap').classList.add('noimg');
 applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+setAr();
 renderStickerPanel();
 document.fonts.ready.then(render);
 addStartup();

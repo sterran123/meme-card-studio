@@ -107,7 +107,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .ratio-tab.on { background: var(--vio); color: #fff; box-shadow: 0 3px 14px rgba(139,124,255,.4); }
 .canvas-wrap {
   position: relative; width: 100%;
-  max-width: min(560px, 92vw, calc(100dvh - 230px));
+  /* 비율(var(--ar)=가로/세로)을 반영해 세로형도 화면 안에 다 보이게 */
+  max-width: min(560px, 92vw, calc((100dvh - 230px) * var(--ar, 1)));
   border-radius: var(--r);
   overflow: hidden;
   box-shadow: var(--shadow);
